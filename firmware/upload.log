@@ -1,0 +1,49 @@
+Processing lilygo-t-display (platform: espressif32; board: lilygo-t-display; framework: arduino)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/lilygo-t-display.html
+PLATFORM: Espressif 32 (6.12.0) > LilyGo T-Display
+HARDWARE: ESP32 240MHz, 320KB RAM, 4MB Flash
+DEBUG: Current (cmsis-dap) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - framework-arduinoespressif32 @ 3.20017.241212+sha.dcc1105b 
+ - tool-esptoolpy @ 2.40900.250804 (4.9.0) 
+ - tool-mkfatfs @ 2.0.1 
+ - tool-mklittlefs @ 1.203.210628 (2.3) 
+ - tool-mkspiffs @ 2.230.0 (2.30) 
+ - toolchain-xtensa-esp32 @ 8.4.0+2021r2-patch5
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 39 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- NimBLE-Arduino @ 1.4.3
+|-- ESPAsyncWebServer @ 3.6.0+sha.ad3741d
+|-- AsyncTCP @ 1.1.1
+|-- ArduinoJson @ 6.21.5
+|-- TFT_eSPI @ 2.5.43
+|-- Preferences @ 2.0.0
+|-- WiFi @ 2.0.0
+|-- DNSServer @ 2.0.0
+|-- HTTPClient @ 2.0.0
+|-- SPI @ 2.0.0
+Building in release mode
+Retrieving maximum program size .pio/build/lilygo-t-display/firmware.elf
+Checking size .pio/build/lilygo-t-display/firmware.elf
+Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
+RAM:   [==        ]  17.6% (used 57552 bytes from 327680 bytes)
+Flash: [==========]  98.5% (used 1291005 bytes from 1310720 bytes)
+Configuring upload protocol...
+AVAILABLE: cmsis-dap, esp-bridge, esp-prog, espota, esptool, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa
+CURRENT: upload_protocol = esptool
+Looking for upload port...
+Auto-detected: /dev/cu.wchusbserial110
+Uploading .pio/build/lilygo-t-display/firmware.bin
+esptool.py v4.9.0
+Serial port /dev/cu.wchusbserial110
+
+A fatal error occurred: Could not open /dev/cu.wchusbserial110, the port is busy or doesn't exist.
+([Errno 35] Could not exclusively lock port /dev/cu.wchusbserial110: [Errno 35] Resource temporarily unavailable)
+
+*** [upload] Error 2
+========================== [FAILED] Took 1.94 seconds ==========================
