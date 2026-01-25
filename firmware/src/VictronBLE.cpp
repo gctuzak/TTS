@@ -11,19 +11,38 @@ void VictronBLE::hexStringToBytes(String hex, uint8_t* bytes) {
 }
 
 void VictronBLE::addDevice(String mac, String keyHex) {
+    // Key'i temizle (Boşlukları ve görünmez karakterleri sil)
+    keyHex.trim();
+    keyHex.replace(" ", "");
+    keyHex.replace("\t", "");
+    keyHex.replace("\r", "");
+    keyHex.replace("\n", "");
+    
     if (keyHex.length() != 32) {
-        Serial.println("HATA: Victron Key 32 karakter olmali!");
+        Serial.printf("HATA: Victron Key 32 karakter olmali! Girilen: %d karakter (%s)\n", keyHex.length(), keyHex.c_str());
         return;
     }
     
-    // MAC adresini normalize et (küçük harf)
+    // MAC adresini normalize et (küçük harf, tire yerine iki nokta)
+    mac.trim();
     mac.toLowerCase();
+    mac.replace("-", ":");
+
+    // Eğer : yoksa ve 12 karakterse, aralara : koy (aabbccddeeff -> aa:bb:cc:dd:ee:ff)
+    if (mac.indexOf(':') == -1 && mac.length() == 12) {
+        String formatted = "";
+        for (int i = 0; i < 12; i += 2) {
+            formatted += mac.substring(i, i + 2);
+            if (i < 10) formatted += ":";
+        }
+        mac = formatted;
+    }
     
     std::vector<uint8_t> keyBytes(16);
     hexStringToBytes(keyHex, keyBytes.data());
     
     deviceKeys[mac] = keyBytes;
-    Serial.printf("Cihaz eklendi: %s\n", mac.c_str());
+    Serial.printf("Cihaz eklendi: %s (Key: %s)\n", mac.c_str(), keyHex.c_str());
 }
 
 void VictronBLE::begin() {
@@ -107,6 +126,11 @@ void VictronBLE::parseDecryptedData(const uint8_t* data, size_t len, VictronData
     result.timestamp = millis();
     result.valid = true;
 
+    // DEBUG: Decrypted Data'yı bas
+    Serial.printf("Decrypted (%d byte, Type %02X): ", len, readoutType);
+    for(size_t i=0; i<len; i++) Serial.printf("%02X ", data[i]);
+    Serial.println();
+
     if (readoutType == 0x01) {
         // --- SOLAR CHARGER (MPPT) ---
         result.type = SOLAR_CHARGER;
@@ -118,41 +142,85 @@ void VictronBLE::parseDecryptedData(const uint8_t* data, size_t len, VictronData
         result.voltage = (float)getS16(2) / 100.0;
         // 4-5: Battery Current (s16, 0.1A)
         result.current = (float)getS16(4) / 10.0;
-        // 6-7: Yield Today (u16, 10Wh) -> Şimdilik kullanmıyoruz
+        // 6-7: Yield Today (u16, 0.01 kWh -> 10Wh)
+        // Repo: vic_16bit_0_01_positive (0.01 kWh unit?) - Not strictly used in local logic yet
+        
         // 8-9: PV Power (u16, 1W)
         result.pvPower = (float)getU16(8);
-        // 10-11: Load Current (u16, 0.1A)
-        result.loadCurrent = (float)getU16(10) / 10.0;
+        
+        // 10-11: Load Current (9 bits, 0.1A)
+        // Repo: vic_9bit_0_1_negative load_current : 9;
+        uint16_t load_raw = getU16(10);
+        result.loadCurrent = (float)(load_raw & 0x1FF) / 10.0;
 
     } else if (readoutType == 0x02) {
         // --- BATTERY MONITOR (SmartShunt / BMV) ---
         result.type = BATTERY_MONITOR;
         
-        // 0-1: Time To Go
+        // 0-1: Time To Go (u16 minutes)
         uint16_t ttg = getU16(0);
         result.remainingMins = (ttg == 0xFFFF) ? -1 : ttg;
         
-        // 2-3: Voltage (0.01V)
+        // 2-3: Voltage (s16, 0.01V)
         result.voltage = (float)getS16(2) / 100.0;
         
-        // 4-5: Alarm
+        // 4-5: Alarm (u16)
         result.alarm = getU16(4);
 
-        // 6-7: Aux Voltage
+        // 6-7: Aux Voltage (u16, 0.01V) - Depends on Aux Input Type, assuming Voltage for now
+        // result.auxVoltage = (float)getS16(6) / 100.0; 
 
-        // 8-10: Current (s24, 0.001A)
-        int32_t current_raw = data[8] | (data[9] << 8) | (data[10] << 16);
-        if (current_raw & 0x800000) current_raw |= 0xFF000000;
-        result.current = (float)current_raw / 1000.0;
+        // --- BITFIELDS PARSING (Bytes 8-14) ---
+        // Reference: struct VICTRON_BLE_RECORD_BATTERY_MONITOR
         
-        // 11-12: Consumed Ah (0.1Ah)
-        result.consumedAh = (float)getS16(11) / 10.0;
+        // Bytes 8, 9, 10 contain:
+        // - aux_input_type : 2 bits (LSB of Byte 8)
+        // - battery_current : 22 bits
+        uint32_t raw_current_chunk = data[8] | (data[9] << 8) | (data[10] << 16);
         
-        // 13-14: SOC (0.1%)
-        uint16_t soc_raw = getU16(13);
-        result.soc = (float)(soc_raw & 0x3FFF) / 10.0;
+        // Extract Current (Shift right 2 bits, mask 22 bits)
+        int32_t current_val = (raw_current_chunk >> 2) & 0x3FFFFF;
+        // Sign extension for 22-bit integer
+        if (current_val & 0x200000) {
+            current_val |= 0xFFC00000;
+        }
+        result.current = (float)current_val / 1000.0; // 0.001A resolution
+        
+        // Bytes 11, 12, 13 contain:
+        // - consumed_ah : 20 bits (Starts at Byte 11)
+        uint32_t raw_ah_chunk = data[11] | (data[12] << 8) | (data[13] << 16);
+        uint32_t ah_val = raw_ah_chunk & 0xFFFFF; // Mask 20 bits
+        
+        // Repo: vic_20bit_0_1_negative (Consumed Ah = -Record value)
+        // It seems the value transmitted is positive magnitude, but represents consumption.
+        // If we follow standard Victron logic, Consumed Ah is usually negative or zero.
+        // Let's store it as negative as per repo hint.
+        if (ah_val == 0xFFFFF) {
+             // Unknown/Unset?
+             result.consumedAh = 0.0;
+        } else {
+             result.consumedAh = -1.0 * (float)ah_val / 10.0; // 0.1Ah resolution
+        }
+
+        // Bytes 13, 14 contain:
+        // - state_of_charge : 10 bits (Starts at Bit 4 of Byte 13)
+        // We need Byte 13 and Byte 14.
+        uint16_t raw_soc_chunk = data[13] | (data[14] << 8);
+        uint16_t soc_val = (raw_soc_chunk >> 4) & 0x3FF; // Shift right 4, mask 10 bits
+        
+        // 0.1% resolution, range 0..1000 (100.0%)
+        if (soc_val > 1000) {
+            result.soc = 100.0; // Or indicate error
+        } else {
+            result.soc = (float)soc_val / 10.0;
+        }
         
         result.power = result.voltage * result.current;
+        
+        // Debug
+        Serial.printf("Parsed BMV: V=%.2f I=%.3f Ah=%.1f SOC=%.1f\n", 
+            result.voltage, result.current, result.consumedAh, result.soc);
+
     } else {
         result.type = UNKNOWN;
     }
