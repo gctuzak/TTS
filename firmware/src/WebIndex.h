@@ -40,7 +40,12 @@ const char index_html[] PROGMEM = R"rawliteral(
     .form-group { margin-bottom: 1rem; }
     label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; }
     input { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
-    button.save-btn { width: 100%; background-color: var(--primary); color: white; padding: 0.75rem; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 1rem; }
+    button.save-btn { width: 100%; background-color: var(--primary); color: white; padding: 0.75rem; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 1rem; margin-top: 1rem; }
+    
+    .device-input-group { background: #f9fafb; padding: 1rem; border-radius: 8px; border: 1px solid #e5e7eb; margin-bottom: 1rem; }
+    .btn-secondary { background-color: #6b7280; color: white; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; }
+    .btn-danger { background-color: var(--danger); color: white; padding: 0.25rem 0.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+    .added-device { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid #e5e7eb; }
     
     .hidden { display: none; }
     .loading { text-align: center; color: #6b7280; padding: 2rem; }
@@ -68,7 +73,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     <div id="settings" class="tab-content hidden">
       <div class="device-card">
         <h2 style="margin-top:0; font-size:1.2rem;">Kurulum Ayarları</h2>
-        <form action="/save" method="POST">
+        <form id="settingsForm" action="/save" method="POST" onsubmit="return submitForm(event)">
           <div class="form-group">
             <label for="ssid">WiFi Adı (SSID)</label>
             <input type="text" id="ssid" name="ssid" placeholder="Tekne WiFi Adı" required>
@@ -81,10 +86,30 @@ const char index_html[] PROGMEM = R"rawliteral(
             <label for="boatId">Tekne Adı</label>
             <input type="text" id="boatId" name="boatId" placeholder="Örn: Mavi Marmara" required>
           </div>
-          <div class="form-group">
-            <label for="victronKey">Victron BLE Key</label>
-            <input type="text" id="victronKey" name="victronKey" placeholder="32 karakterlik hex anahtar">
+          
+          <hr style="border:0; border-top:1px solid #e5e7eb; margin: 1.5rem 0;">
+          
+          <h3 style="font-size:1rem; margin-bottom:0.5rem;">Cihaz Listesi</h3>
+          <div id="addedDevicesList" style="margin-bottom: 1rem;">
+             <!-- Eklenen cihazlar buraya gelecek -->
           </div>
+          
+          <div class="device-input-group">
+            <h4 style="margin:0 0 0.5rem 0; font-size:0.9rem;">Yeni Cihaz Ekle</h4>
+            <div class="form-group">
+                <label>MAC Adresi</label>
+                <input type="text" id="newMac" placeholder="aa:bb:cc:dd:ee:ff">
+            </div>
+            <div class="form-group">
+                <label>Encryption Key</label>
+                <input type="text" id="newKey" placeholder="32 karakterlik hex anahtar">
+            </div>
+            <button type="button" class="btn-secondary" onclick="addDevice()">Listeye Ekle</button>
+          </div>
+          
+          <!-- Gizli input: JSON string olarak cihazları tutacak -->
+          <input type="hidden" id="devicesJson" name="devices">
+
           <button type="submit" class="save-btn">Kaydet ve Yeniden Başlat</button>
         </form>
       </div>
@@ -92,12 +117,79 @@ const char index_html[] PROGMEM = R"rawliteral(
   </div>
 
   <script>
+    let devices = [];
+
     function showTab(tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
       
       document.getElementById(tabId).classList.remove('hidden');
       event.target.classList.add('active');
+      
+      if(tabId === 'settings') {
+          loadSettings();
+      }
+    }
+    
+    function loadSettings() {
+        fetch('/api/config')
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('ssid').value = data.ssid || '';
+            document.getElementById('boatId').value = data.boatId || '';
+            devices = data.devices || [];
+            renderDeviceList();
+        })
+        .catch(err => console.error('Ayar okuma hatasi:', err));
+    }
+    
+    function addDevice() {
+        const mac = document.getElementById('newMac').value.trim();
+        const key = document.getElementById('newKey').value.trim();
+        
+        if(!mac || !key) {
+            alert('MAC ve Key alanları boş olamaz!');
+            return;
+        }
+        
+        devices.push({ mac: mac, key: key });
+        renderDeviceList();
+        
+        document.getElementById('newMac').value = '';
+        document.getElementById('newKey').value = '';
+    }
+    
+    function removeDevice(index) {
+        devices.splice(index, 1);
+        renderDeviceList();
+    }
+    
+    function renderDeviceList() {
+        const list = document.getElementById('addedDevicesList');
+        if(devices.length === 0) {
+            list.innerHTML = '<div style="color:#9ca3af; font-style:italic;">Henüz cihaz eklenmemiş.</div>';
+            return;
+        }
+        
+        let html = '';
+        devices.forEach((d, i) => {
+            html += `
+                <div class="added-device">
+                    <div>
+                        <div style="font-weight:600;">${d.mac}</div>
+                        <div style="font-size:0.75rem; color:#6b7280;">Key: ${d.key.substring(0,6)}...</div>
+                    </div>
+                    <button type="button" class="btn-danger" onclick="removeDevice(${i})">Sil</button>
+                </div>
+            `;
+        });
+        list.innerHTML = html;
+    }
+    
+    function submitForm(e) {
+        // Cihaz listesini JSON string'e çevirip gizli input'a ata
+        document.getElementById('devicesJson').value = JSON.stringify(devices);
+        return true;
     }
 
     function renderDevices(devices) {

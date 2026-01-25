@@ -11,6 +11,7 @@
 #include "VictronBLE.h"
 #include "ConfigManager.h"
 
+#define BOOT_BUTTON 0
 
 // --- Global Nesneler ---
 AsyncWebServer server(80);
@@ -20,7 +21,7 @@ TFT_eSPI tft = TFT_eSPI();
 
 // --- Değişkenler ---
 unsigned long lastTelemeterySend = 0;
-const long TELEMETRY_INTERVAL = 60000; 
+const long TELEMETRY_INTERVAL = 10000; 
 unsigned long lastDisplayUpdate = 0;
 unsigned long apTimeout = 0;
 bool isApMode = false;
@@ -89,82 +90,99 @@ void updateDisplay() {
     // Header
     tft.setTextColor(TFT_CYAN, TFT_BLACK);
     tft.setTextSize(2);
-    tft.setCursor(5, 5);
+    tft.setCursor(0, 0);
     tft.print("Victron BLE");
 
     // WiFi Status
     tft.setTextSize(1);
-    tft.setCursor(200, 10);
+    tft.setTextDatum(TR_DATUM); // Sağ üst köşe hizalama
+    int wifiStatusX = tft.width() - 2;
+    
     if (WiFi.status() == WL_CONNECTED) {
         tft.setTextColor(TFT_GREEN, TFT_BLACK);
-        tft.print("WIFI: BAGLI");
+        tft.drawString("WIFI: BAGLI", wifiStatusX, 5, 1);
     } else if (isApMode) {
         tft.setTextColor(TFT_MAGENTA, TFT_BLACK);
-        tft.print("MOD: SETUP");
+        tft.drawString("MOD: SETUP", wifiStatusX, 5, 1);
     } else {
         tft.setTextColor(TFT_RED, TFT_BLACK);
-        tft.print("WIFI: YOK");
+        tft.drawString("WIFI: YOK", wifiStatusX, 5, 1);
     }
+    tft.setTextDatum(TL_DATUM); // Sol üst köşe hizalamaya geri dön
 
-    tft.drawLine(0, 30, 320, 30, TFT_DARKGREY);
+    tft.drawLine(0, 22, tft.width(), 22, TFT_DARKGREY);
 
     if (batteryMonitorFound || mpptCount > 0) {
+        int row1_y = 30;
+        int row1_val_y = 45;
+        int col2_x = 130;
+
         // Voltage
-        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
         tft.setTextSize(1);
-        tft.setCursor(10, 40);
+        tft.setCursor(0, row1_y);
         tft.print("AKU VOLTAJI");
         
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
         tft.setTextSize(3);
-        tft.setCursor(10, 55);
-        if (batteryMonitorFound) tft.printf("%.2f V", mainBatteryVoltage);
-        else tft.print("--.-- V");
+        tft.setCursor(0, row1_val_y);
+        if (batteryMonitorFound) tft.printf("%.2fV", mainBatteryVoltage);
+        else tft.print("--.--V");
 
         // Current
-        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
         tft.setTextSize(1);
-        tft.setCursor(170, 40);
+        tft.setCursor(col2_x, row1_y);
         tft.print("AKIM");
         
         tft.setTextSize(3);
-        tft.setCursor(170, 55);
+        tft.setCursor(col2_x, row1_val_y);
         if (batteryMonitorFound) {
              if (mainBatteryCurrent > 0) tft.setTextColor(TFT_GREEN, TFT_BLACK);
              else tft.setTextColor(TFT_RED, TFT_BLACK);
-             tft.printf("%.1f A", mainBatteryCurrent);
+             tft.printf("%.1fA", mainBatteryCurrent);
         } else {
-             tft.print("--.- A");
+             tft.setTextColor(TFT_WHITE, TFT_BLACK);
+             tft.print("--.-A");
         }
 
         // SOC
+        int row2_y = 80;
         tft.setTextColor(TFT_YELLOW, TFT_BLACK);
         tft.setTextSize(2);
-        tft.setCursor(10, 100);
-        if (batteryMonitorFound) tft.printf("SOC: %.1f %%", mainBatterySoc);
-        else tft.print("SOC: --.- %");
+        tft.setCursor(0, row2_y);
+        if (batteryMonitorFound) tft.printf("SOC: %.1f%%", mainBatterySoc);
+        else tft.print("SOC: --.-%");
         
         // SOC Bar
-        int barWidth = 300;
-        int barHeight = 20;
-        int fillWidth = batteryMonitorFound ? (int)((mainBatterySoc / 100.0) * barWidth) : 0;
-        tft.drawRect(10, 125, barWidth, barHeight, TFT_WHITE);
-        tft.fillRect(12, 127, fillWidth-4, barHeight-4, (mainBatterySoc > 50 ? TFT_GREEN : TFT_RED));
+        int barY = 105;
+        int barHeight = 15;
+        int barWidth = tft.width() - 4;
+        
+        tft.drawRect(0, barY, barWidth, barHeight, TFT_WHITE);
+        if (batteryMonitorFound) {
+            int fillWidth = (int)((mainBatterySoc / 100.0) * (barWidth - 4));
+            tft.fillRect(2, barY + 2, fillWidth, barHeight - 4, (mainBatterySoc > 50 ? TFT_GREEN : TFT_RED));
+        }
 
-        // Solar Info (New!)
-        tft.setTextColor(TFT_ORANGE, TFT_BLACK);
-        tft.setTextSize(2);
-        tft.setCursor(10, 155);
-        tft.printf("PV: %.0f W (%d MPPT)", totalPvPower, mpptCount);
+        // Solar Info
+        int row3_y = 130;
+        if (mpptCount > 0) {
+            tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+            tft.setTextSize(1); // Alan dar, küçülttük
+            tft.setCursor(0, row3_y);
+            tft.printf("PV: %.0fW (%d MPPT)", totalPvPower, mpptCount);
+        }
         
         // TTG
         tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
         tft.setTextSize(1);
-        tft.setCursor(10, 180);
+        tft.setCursor(130, row3_y); // Solar'ın yanına veya altına
         if (batteryMonitorFound) {
              if (mainBatteryRemaining == 0xFFFF || mainBatteryRemaining == -1) {
                   tft.print("SURE: Sonsuz");
              } else {
-                  tft.printf("SURE: %d dk", mainBatteryRemaining);
+                  tft.printf("SURE: %ddk", mainBatteryRemaining);
              }
         } else {
              tft.print("SURE: --");
@@ -212,41 +230,70 @@ void updateDisplay() {
 
 void setup() {
   Serial.begin(115200);
+  delay(3000); // Wait for serial monitor
+  Serial.println("\n\n--- SISTEM BASLATILIYOR ---");
+  
+  // Boot Düğmesi Ayarı
+  pinMode(BOOT_BUTTON, INPUT_PULLUP);
+
   setupDisplay();
   
   // NVS'den Ayarları Oku (ConfigManager)
   loadConfig();
   
-  // WiFi Güç Tasarrufunu Kapat (Bağlantı kararlılığı için önemli)
-  // WiFi.setSleep(false);
-
-  Serial.println("Ayarlar Okundu:");
+  Serial.println("--- DEBUG: STARTUP CONFIG ---");
   Serial.println("SSID: " + config_ssid);
-  Serial.println("Key: " + config_victronKey);
+  Serial.println("DevicesJSON Length: " + String(config_devicesJson.length()));
+  Serial.println("DevicesJSON Content: " + config_devicesJson);
+  Serial.println("-----------------------------");
 
   // WiFi Bağlantısı Dene
-  if (config_ssid != "") {
-      Serial.println("WiFi Baglaniyor...");
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(config_ssid.c_str(), config_pass.c_str());
-      
-      // 10 saniye bekle
-      int retry = 0;
-      while (WiFi.status() != WL_CONNECTED && retry < 20) {
-          delay(500);
-          Serial.print(".");
-          retry++;
-      }
-      
-      if (WiFi.status() == WL_CONNECTED) {
-          Serial.println("\nWiFi Baglandi!");
-          Serial.println(WiFi.localIP());
-          isApMode = false;
-      } else {
-          Serial.println("\nWiFi Baglantisi Basarisiz. AP Moduna geciliyor.");
-          isApMode = true;
-      }
-  } else {
+    if (config_ssid != "") {
+        Serial.println("WiFi Baglaniyor...");
+        WiFi.disconnect(true);  // Eski baglantilari temizle
+        delay(100);
+        WiFi.mode(WIFI_STA);
+        delay(100);
+        
+        // DNS Ayarlari - Google ve Cloudflare
+        // 0.0.0.0 (INADDR_NONE) DHCP kullan demektir
+        WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, IPAddress(8,8,8,8), IPAddress(1,1,1,1));
+        
+        WiFi.begin(config_ssid.c_str(), config_pass.c_str());
+        
+        int attempts = 0;
+        while (WiFi.status() != WL_CONNECTED && attempts < 40) { // 20 saniye bekle
+            delay(500);
+            Serial.print(".");
+            attempts++;
+        }
+        Serial.println();
+        
+        if (WiFi.status() == WL_CONNECTED) {
+            Serial.print("WiFi Baglandi. IP: ");
+            Serial.println(WiFi.localIP());
+            Serial.print("Gateway: ");
+            Serial.println(WiFi.gatewayIP());
+            Serial.print("DNS: ");
+            Serial.println(WiFi.dnsIP());
+            Serial.print("RSSI: ");
+            Serial.println(WiFi.RSSI());
+            
+            // DNS Testi
+            IPAddress result;
+            if(WiFi.hostByName("google.com", result)) {
+                Serial.print("DNS Test Basarili (google.com): ");
+                Serial.println(result);
+            } else {
+                Serial.println("DNS Testi Basarisiz!");
+            }
+            
+            isApMode = false;
+        } else {
+            Serial.println("WiFi Baglanti Hatasi!");
+            isApMode = true;
+        }
+    } else {
       Serial.println("Kayitli WiFi yok. AP Modu.");
       isApMode = true;
   }
@@ -268,8 +315,9 @@ void setup() {
       
       // Captive Portal için DNS Sunucusunu Başlat
       // Tüm alan adlarını (*) kendi IP'mize yönlendir
-      dnsServer.start(53, "*", WiFi.softAPIP());
-      Serial.println("DNS Sunucusu Baslatildi (Captive Portal)");
+      // dnsServer.start(53, "*", WiFi.softAPIP());
+      // Serial.println("DNS Sunucusu Baslatildi (Captive Portal)");
+      Serial.println("Captive Portal Devre Disi (Manuel IP: 192.168.4.1)");
   }
 
   // Web Sunucusunu Başlat (ConfigManager)
@@ -277,10 +325,30 @@ void setup() {
   server.begin();
 
   // BLE Başlat (AP Modunda da çalışsın)
-    // Kullanıcının Cihazları
-    victronScanner.addDevice("c4:6e:65:94:c2:82", "f753c671e304071113866c4e8e52fd19"); // BMV
-    victronScanner.addDevice("d9:8b:71:bb:3f:1b", "f03ac1e836a789e14ca5d9a07aa165c3"); // Solar
-    victronScanner.addDevice("f1:2c:a4:ea:b1:42", "d9f9a31114a47b7d01f997ebcebbfdda"); // Dongle
+    // Kayıtlı cihazları JSON'dan yükle
+    Serial.println("JSON Parse Ediliyor: " + config_devicesJson);
+    DynamicJsonDocument devicesDoc(4096);
+    DeserializationError error = deserializeJson(devicesDoc, config_devicesJson);
+    
+    if (!error) {
+        JsonArray devices = devicesDoc.as<JsonArray>();
+        Serial.printf("Kayitli %d cihaz yukleniyor...\n", devices.size());
+        
+        for (JsonObject d : devices) {
+            String mac = d["mac"].as<String>();
+            String key = d["key"].as<String>();
+            
+            Serial.printf("Cihaz Ekleme Deneniyor -> MAC: %s, Key: %s\n", mac.c_str(), key.c_str());
+            
+            if (mac.length() > 0 && key.length() > 0) {
+                victronScanner.addDevice(mac, key);
+            } else {
+                Serial.println("HATA: MAC veya Key bos!");
+            }
+        }
+    } else {
+        Serial.printf("JSON Parse Hatasi: %s\n", error.c_str());
+    }
     
     Serial.println("BLE Baslatiliyor... (1s bekleme)");
     delay(1000);
@@ -294,72 +362,128 @@ void setup() {
 
 void sendTelemetry() {
     if (WiFi.status() != WL_CONNECTED) return;
-    if (config_supabaseUrl == "" || config_secret == "") return;
+    
+    // DEBUG: DNS Kontrol
+    Serial.print("Aktif DNS: ");
+    Serial.println(WiFi.dnsIP());
+
+    if (config_supabaseUrl == "" || config_secret == "") {
+        Serial.println("HATA: Supabase URL veya Secret eksik!");
+        return;
+    }
 
     std::map<String, VictronData> devices = victronScanner.getDevices();
-    if (devices.empty()) return;
+    if (devices.empty()) {
+        Serial.println("Gonderilecek cihaz verisi yok.");
+        return;
+    }
 
-    // JSON Oluştur (PostgREST Array formatında)
+    // JSON Oluştur (Edge Function Formatı: { measurements: [...] })
     DynamicJsonDocument doc(4096);
+    JsonObject root = doc.to<JsonObject>();
+    JsonArray measurements = root.createNestedArray("measurements");
     
     bool hasNewData = false;
 
     for (auto const& [mac, data] : devices) {
         // Sadece son 1 dakika içinde güncellenen verileri gönder
-        if (millis() - data.timestamp > 60000) continue;
+        if (millis() - data.timestamp > 60000) {
+            Serial.printf("Atlanan eski veri: %s\n", mac.c_str());
+            continue;
+        }
         
         hasNewData = true;
-        JsonObject deviceObj = doc.createNestedObject();
+        JsonObject m = measurements.createNestedObject();
         
-        // Veritabanı sütun isimleri
-        deviceObj["boat_id"] = config_boatId;
-        deviceObj["device_mac"] = mac;
-        deviceObj["device_type"] = (int)data.type;
-        deviceObj["voltage"] = data.voltage;
-        deviceObj["current"] = data.current;
+        m["mac"] = mac; // Cihaz MAC adresi
+        
+        // Edge Function uyumlu alan isimleri
+        m["v"] = data.voltage;
+        m["i"] = data.current;
+        m["t"] = data.temperature; // Sıcaklık eklendi
+        m["a"] = data.alarm;       // Alarm durumu eklendi
         
         if (data.type == SOLAR_CHARGER) {
-            deviceObj["pv_power"] = data.pvPower;
-            deviceObj["load_current"] = data.loadCurrent;
-            deviceObj["device_state"] = data.deviceState;
+            m["p"] = data.pvPower;
+            // Diğer alanlar şimdilik backend tarafından desteklenmiyor
         } else if (data.type == BATTERY_MONITOR) {
-            deviceObj["soc"] = data.soc;
-            deviceObj["consumed_ah"] = data.consumedAh;
-            deviceObj["remaining_mins"] = data.remainingMins;
+            m["soc"] = data.soc;
         }
+        
+        // Cihaz türünü ayırt etmek için opsiyonel
+        // m["type"] = (int)data.type; 
     }
 
-    if (!hasNewData) return;
+    if (!hasNewData) {
+        Serial.println("Guncel veri bulunamadi, gonderim iptal.");
+        return;
+    }
 
     String jsonString;
     serializeJson(doc, jsonString);
+    Serial.println("Gonderilen JSON: " + jsonString);
 
-    // URL Oluştur
+    // URL Oluştur (Edge Function)
     String url = config_supabaseUrl;
     if (url.endsWith("/")) url = url.substring(0, url.length() - 1);
-    url += "/rest/v1/telemetry";
+    url += "/functions/v1/telemetry";
 
     // HTTP POST Gönder
     HTTPClient http;
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
-    http.addHeader("apikey", config_secret);
+    
+    // Edge Function Auth Headers
+    http.addHeader("x-boat-id", config_boatId);
+    http.addHeader("x-device-secret", config_secret);
+    
+    // Supabase Auth (Anon Key gerekebilir)
     http.addHeader("Authorization", String("Bearer ") + config_secret);
-    http.addHeader("Prefer", "return=minimal");
     
     int httpResponseCode = http.POST(jsonString);
     
     if (httpResponseCode >= 200 && httpResponseCode < 300) {
         Serial.printf("Telemetri Gonderildi: %d\n", httpResponseCode);
+        Serial.println("Sunucu Cevabi: " + http.getString());
     } else {
-        Serial.printf("Telemetri Hatasi: %d\n", httpResponseCode);
-        // Serial.println(http.getString()); // Detay gerekirse açılabilir
+        Serial.printf("Telemetri Hatasi: %d (WiFi IP: %s)\n", httpResponseCode, WiFi.localIP().toString().c_str());
+        Serial.println("Sunucu Cevabi: " + http.getString());
     }
     
     http.end();
 }
 
+// Buton Zamanlayıcısı
+unsigned long bootBtnTimer = 0;
+bool bootBtnPressed = false;
+
 void loop() {
+  // Boot Butonu Kontrolü (5 sn basılı tutulursa resetle)
+  if (digitalRead(BOOT_BUTTON) == LOW) {
+      if (!bootBtnPressed) {
+          bootBtnPressed = true;
+          bootBtnTimer = millis();
+      }
+      
+      if (millis() - bootBtnTimer > 5000) {
+          tft.fillScreen(TFT_RED);
+          tft.setTextColor(TFT_WHITE, TFT_RED);
+          tft.setTextSize(2);
+          tft.setCursor(10, 60);
+          tft.println("AYARLAR");
+          tft.setCursor(10, 90);
+          tft.println("SIFIRLANIYOR...");
+          
+          Serial.println("Boot butonuna 5sn basildi. Resetleniyor...");
+          resetConfig();
+          delay(2000);
+          ESP.restart();
+      }
+  } else {
+      bootBtnPressed = false;
+      bootBtnTimer = 0;
+  }
+
   // Captive Portal DNS İsteklerini İşle
   if (isApMode) {
       dnsServer.processNextRequest();

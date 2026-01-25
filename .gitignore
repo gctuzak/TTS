@@ -1,5 +1,9 @@
 # PlatformIO
 .pio/
+.pio_core/
+.pio-core/
+firmware/.pio_core/
+firmware/pio_core/
 .platformio_local/
 firmware/.platformio_core/
 firmware/temp_pio_core/
