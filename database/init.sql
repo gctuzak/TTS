@@ -25,13 +25,17 @@ create table if not exists telemetry (
   soc numeric,
   consumed_ah numeric,
   remaining_mins integer,
+  aux_voltage numeric, -- Starter Battery
   
   -- Solar Charger
   pv_power numeric,
+  pv_voltage numeric,
+  pv_current numeric,
   load_current numeric,
+  load_state integer, -- Virtual Load Output
   device_state integer,
-  
-  -- Other
+  yield_today numeric, -- Günlük Üretim (kWh)
+  efficiency numeric, -- Verim (%)
   temperature numeric,
   alarm integer,
   mac_address text, -- To distinguish devices (MPPT vs Shunt)

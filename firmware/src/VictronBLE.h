@@ -29,11 +29,17 @@ struct VictronData {
     float soc = 0.0;         // Şarj Durumu (%)
     float consumedAh = 0.0;  // Tüketilen Ah
     int remainingMins = 0;   // Kalan Süre
+    float auxVoltage = 0.0;  // Marş Aküsü Voltajı (V)
     
     // Solar Charger (MPPT) Özel
     float pvPower = 0.0;     // Panel Gücü (W)
+    float pvVoltage = 0.0;   // Panel Voltajı (V) - Hesaplanabilir veya Extra Data
+    float pvCurrent = 0.0;   // Panel Akımı (A) - Hesaplanabilir
     float loadCurrent = 0.0; // Yük Akımı (A)
+    int loadState = 0;       // Yük Çıkışı Durumu (0: Kapalı, 1: Açık)
     int deviceState = 0;     // MPPT Durumu (Bulk, Abs, Float vs.)
+    float yieldToday = 0.0;  // Günlük Üretim (kWh)
+    float efficiency = 0.0;  // Verim (%)
 
     float temperature = -999.0; // Varsa sıcaklık
     int alarm = 0;           // Alarm durumu

@@ -17,7 +17,7 @@ extern VictronBLE victronScanner;
 // --- Değişkenler (main.cpp ile paylaşılacak) ---
 String config_ssid = "";
 String config_pass = "";
-String config_boatId = "Mavi Marmara";
+String config_boatId = "Euphoria";
 // Hardcoded Supabase Credentials
 String config_supabaseUrl = "https://rombkctiztzusujxezfh.supabase.co";
 String config_secret = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJvbWJrY3RpenR6dXN1anhlemZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkzMjU1MzYsImV4cCI6MjA4NDkwMTUzNn0.oWlvD0vb1s7wIUOsWEQYGwTf70_REx-fo2hZdSlveho";
@@ -146,10 +146,12 @@ void setupWebServer() {
                 obj["pv_power"] = data.pvPower;
                 obj["load_current"] = data.loadCurrent;
                 obj["state"] = data.deviceState;
+                obj["yield_today"] = data.yieldToday;
             } else if (data.type == BATTERY_MONITOR) {
                 obj["soc"] = data.soc;
                 obj["consumed_ah"] = data.consumedAh;
                 obj["remaining_mins"] = data.remainingMins;
+                obj["power"] = data.power;
             }
         }
 

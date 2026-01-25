@@ -223,11 +223,21 @@ const char index_html[] PROGMEM = R"rawliteral(
               <div class="metric-value" style="color:var(--warning)">${d.pv_power} <span class="unit">W</span></div>
             </div>
             <div class="metric">
+              <span class="metric-label">Günlük Üretim</span>
+              <div class="metric-value" style="color:var(--success)">${(d.yield_today || 0).toFixed(2)} <span class="unit">kWh</span></div>
+            </div>
+            <div class="metric" style="grid-column: span 2;">
               <span class="metric-label">Durum</span>
               <div class="metric-value">${d.state}</div>
             </div>
           `;
         } else if (d.type === 2) { // Battery Monitor
+          metricsHtml += `
+            <div class="metric" style="grid-column: span 2;">
+              <span class="metric-label">Anlık Güç</span>
+              <div class="metric-value" style="color:${d.power >= 0 ? 'var(--success)' : 'var(--danger)'}">${Math.round(d.power || 0)} <span class="unit">W</span></div>
+            </div>
+          `;
           const socColor = d.soc > 50 ? 'var(--success)' : (d.soc > 20 ? 'var(--warning)' : 'var(--danger)');
           extraHtml = `
             <div style="margin-top:1rem;">

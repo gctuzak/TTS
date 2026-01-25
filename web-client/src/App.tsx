@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from './lib/supabase'
 import { Auth } from './components/Auth'
-import { DeviceOnboarding } from './components/DeviceOnboarding'
 import { SystemFlow } from './components/SystemFlow'
 import { StatCard } from './components/StatCard'
 import { HistoryCharts } from './components/HistoryCharts'
-import { Battery, Zap, Sun, Clock, LogOut, PlusCircle } from 'lucide-react'
+import { DeviceDetail } from './components/DeviceDetail'
+import { Battery, Zap, Sun, Clock, LogOut } from 'lucide-react'
 import './App.css'
 
 // Veritabanı tipleri
@@ -19,13 +19,19 @@ interface TelemetryRow {
   soc: number | null
   consumed_ah: number | null
   remaining_mins: number | null
+  aux_voltage: number | null
   pv_power: number | null
+  pv_voltage: number | null
+  pv_current: number | null
   load_current: number | null
+  load_state: number | null
   device_state: number | null
   temperature: number | null
   alarm: number | null
   mac_address: string | null
   device_type: number | null
+  yield_today: number | null
+  efficiency: number | null
 }
 
 interface Boat {
@@ -69,16 +75,36 @@ function App() {
     }
 
     const fetchBoat = async () => {
-      // Kullanıcının ilk teknesini al
-      // maybeSingle() kullanıyoruz ki tekne yoksa hata vermesin, null dönsün
-      const { data, error } = await supabase
+      // En son eklenen tekneyi al (Varsa Euphoria veya kullanıcının oluşturduğu son tekne)
+      let { data, error } = await supabase
         .from('boats')
         .select('*')
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 
       if (error) {
         console.error('Tekne verisi çekilemedi:', error)
+      }
+
+      // Eğer hiç tekne yoksa, otomatik oluştur
+      if (!data) {
+        console.log("Hiç tekne bulunamadı, varsayılan tekne oluşturuluyor...")
+        const { data: newBoat, error: createError } = await supabase
+          .from('boats')
+          .insert({
+             name: 'Euphoria', // Firmware ile eşleşmesi için
+             user_id: session.user.id, // Sahip olarak mevcut kullanıcıyı ata
+             device_secret: 'default-secret' // Basit bir secret
+          })
+          .select()
+          .single()
+        
+        if (createError) {
+             console.error("Otomatik tekne oluşturma hatası:", createError)
+        } else {
+             data = newBoat
+        }
       }
 
       if (data) {
@@ -141,9 +167,6 @@ function App() {
         return () => {
           supabase.removeChannel(channel)
         }
-      } else {
-        // Tekne yoksa boat state'i null kalır, bu da Onboarding ekranını tetikler.
-        setBoat(null)
       }
     }
 
@@ -200,21 +223,8 @@ function App() {
     if (!boat) {
       return (
         <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white p-4">
-          <div className="w-full max-w-md mb-8">
-             <h1 className="text-3xl font-bold text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent mb-2">
-              TTS Kurulum
-            </h1>
-            <p className="text-center text-gray-400">Cihazınızı eşleştirerek başlayın</p>
-          </div>
-          
-          <DeviceOnboarding onComplete={() => window.location.reload()} />
-          
-          <button 
-            onClick={() => supabase.auth.signOut()}
-            className="mt-8 text-sm text-gray-500 hover:text-white"
-          >
-            Çıkış Yap
-          </button>
+            <h1 className="text-2xl mb-4">Tekne Bilgisi Yükleniyor...</h1>
+            <p className="text-gray-400">Veritabanı bağlantısı kuruluyor.</p>
         </div>
       )
     }
@@ -292,6 +302,20 @@ function App() {
           {/* Alt Kısım: Grafikler */}
           <section>
             <HistoryCharts data={historyData} />
+          </section>
+
+          {/* Cihaz Detayları */}
+          <section>
+            <h2 className="text-xl font-bold mb-4 text-gray-300">Cihaz Detayları</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Object.values(deviceMap).map((device) => (
+                <DeviceDetail 
+                  key={device.mac_address} 
+                  device={device} 
+                  name={device.device_type === 1 ? 'Solar Charger' : (device.device_type === 2 ? 'Battery Monitor' : device.mac_address || 'Cihaz')} 
+                />
+              ))}
+            </div>
           </section>
         </main>
       </div>

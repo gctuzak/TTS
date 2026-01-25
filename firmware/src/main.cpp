@@ -402,12 +402,23 @@ void sendTelemetry() {
         m["i"] = data.current;
         m["t"] = data.temperature; // Sıcaklık eklendi
         m["a"] = data.alarm;       // Alarm durumu eklendi
+        m["dt"] = (int)data.type;  // Device Type (1=Solar, 2=BMV)
         
         if (data.type == SOLAR_CHARGER) {
-            m["p"] = data.pvPower;
-            // Diğer alanlar şimdilik backend tarafından desteklenmiyor
+            m["p"] = data.pvPower;   // PV Power
+            m["pv_v"] = data.pvVoltage;
+            m["pv_i"] = data.pvCurrent;
+            m["l_i"] = data.loadCurrent;
+            m["l_s"] = data.loadState;
+            m["d_s"] = data.deviceState;
+            m["yt"] = data.yieldToday;  // Yield Today
+            m["eff"] = data.efficiency; // Efficiency
         } else if (data.type == BATTERY_MONITOR) {
             m["soc"] = data.soc;
+            m["c_ah"] = data.consumedAh;
+            m["rem"] = data.remainingMins;
+            m["aux"] = data.auxVoltage;
+            m["p"] = data.power; // Net Power (W)
         }
         
         // Cihaz türünü ayırt etmek için opsiyonel

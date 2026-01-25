@@ -143,15 +143,40 @@ void VictronBLE::parseDecryptedData(const uint8_t* data, size_t len, VictronData
         // 4-5: Battery Current (s16, 0.1A)
         result.current = (float)getS16(4) / 10.0;
         // 6-7: Yield Today (u16, 0.01 kWh -> 10Wh)
-        // Repo: vic_16bit_0_01_positive (0.01 kWh unit?) - Not strictly used in local logic yet
+        // Repo: vic_16bit_0_01_positive
+        result.yieldToday = (float)getU16(6) * 0.01;
         
         // 8-9: PV Power (u16, 1W)
         result.pvPower = (float)getU16(8);
         
+        // Verim Hesabı: (Battery Power / PV Power) * 100
+        // Battery Power = Voltage * Current (Output)
+        float batteryPower = result.voltage * result.current;
+        if (result.pvPower > 0) {
+            result.efficiency = (batteryPower / result.pvPower) * 100.0;
+            if (result.efficiency > 100.0) result.efficiency = 100.0; // Limit
+            if (result.efficiency < 0.0) result.efficiency = 0.0;
+        } else {
+            result.efficiency = 0.0;
+        }
+
         // 10-11: Load Current (9 bits, 0.1A)
         // Repo: vic_9bit_0_1_negative load_current : 9;
         uint16_t load_raw = getU16(10);
         result.loadCurrent = (float)(load_raw & 0x1FF) / 10.0;
+        
+        // Bit 9: Load State (1=On, 0=Off) - Tahmini
+        result.loadState = (load_raw & 0x200) ? 1 : 0;
+
+        // PV Voltage/Current: BLE Advertisement paketinde bulunmuyor.
+        // Ancak 0W ise 0 kabul edebiliriz.
+        if (result.pvPower == 0) {
+            result.pvVoltage = 0.0;
+            result.pvCurrent = 0.0;
+        } else {
+            // Eğer güç varsa ama voltaj bilinmiyorsa, hesaplanamaz.
+            // Şimdilik 0 bırakıyoruz, frontend'de "--" gösterilebilir.
+        }
 
     } else if (readoutType == 0x02) {
         // --- BATTERY MONITOR (SmartShunt / BMV) ---
@@ -167,8 +192,8 @@ void VictronBLE::parseDecryptedData(const uint8_t* data, size_t len, VictronData
         // 4-5: Alarm (u16)
         result.alarm = getU16(4);
 
-        // 6-7: Aux Voltage (u16, 0.01V) - Depends on Aux Input Type, assuming Voltage for now
-        // result.auxVoltage = (float)getS16(6) / 100.0; 
+        // 6-7: Aux Voltage (u16, 0.01V) - Starter Battery
+        result.auxVoltage = (float)getS16(6) / 100.0; 
 
         // --- BITFIELDS PARSING (Bytes 8-14) ---
         // Reference: struct VICTRON_BLE_RECORD_BATTERY_MONITOR
