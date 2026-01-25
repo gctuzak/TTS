@@ -48,24 +48,27 @@ private:
     NimBLEScan* pBLEScan;
     std::map<String, VictronData> devices;
     
-    // Kullanıcıdan gelen AES Key (16 byte binary)
-    // Basitlik için tüm cihazlarda aynı key varsayıyoruz
-    uint8_t aesKey[16];
-    bool keySet = false;
+    // Cihaz MAC adresi -> AES Key (16 byte) haritası
+    std::map<String, std::vector<uint8_t>> deviceKeys;
 
     void hexStringToBytes(String hex, uint8_t* bytes);
-    bool decryptData(const uint8_t* rawData, size_t len, uint8_t* decryptedBuffer, uint16_t deviceId);
+    // decryptData artık MAC adresini de alıyor
+    bool decryptData(String macAddress, const uint8_t* rawData, size_t len, uint8_t* decryptedBuffer);
     void parseDecryptedData(const uint8_t* data, size_t len, VictronData& result, uint8_t readoutType);
 
 public:
     VictronBLE();
     void begin();
     void update();
-    void setKey(String keyHex);
+    // Yeni cihaz ekleme fonksiyonu
+    void addDevice(String mac, String keyHex);
     void simulate(); // Test için simülasyon verisi ekler
     
     // Tüm cihazların listesini döndür
     std::map<String, VictronData> getDevices() { return devices; }
+
+    String lastSeenDevice; // Son gorulen cihaz MAC adresi
+    String lastError;      // Son hata mesaji
 
     // NimBLE Callback
     void onResult(NimBLEAdvertisedDevice* advertisedDevice) override;

@@ -1,5 +1,8 @@
 # PlatformIO
 .pio/
+.platformio_local/
+firmware/.platformio_core/
+firmware/temp_pio_core/
 .pioenvs/
 .piolibdeps/
 .sconsign.dblite

@@ -10,15 +10,20 @@ void VictronBLE::hexStringToBytes(String hex, uint8_t* bytes) {
     }
 }
 
-void VictronBLE::setKey(String keyHex) {
-    if (keyHex.length() == 32) {
-        hexStringToBytes(keyHex, aesKey);
-        keySet = true;
-        Serial.println("Victron AES Key Ayarlandi.");
-    } else {
+void VictronBLE::addDevice(String mac, String keyHex) {
+    if (keyHex.length() != 32) {
         Serial.println("HATA: Victron Key 32 karakter olmali!");
-        keySet = false;
+        return;
     }
+    
+    // MAC adresini normalize et (küçük harf)
+    mac.toLowerCase();
+    
+    std::vector<uint8_t> keyBytes(16);
+    hexStringToBytes(keyHex, keyBytes.data());
+    
+    deviceKeys[mac] = keyBytes;
+    Serial.printf("Cihaz eklendi: %s\n", mac.c_str());
 }
 
 void VictronBLE::begin() {
@@ -44,27 +49,43 @@ void VictronBLE::update() {
     }
 }
 
-bool VictronBLE::decryptData(const uint8_t* rawData, size_t len, uint8_t* decryptedBuffer, uint16_t deviceId) {
-    if (!keySet) return false;
-    if (len < 10) return false;
+bool VictronBLE::decryptData(String macAddress, const uint8_t* rawData, size_t len, uint8_t* decryptedBuffer) {
+    macAddress.toLowerCase();
+    
+    if (deviceKeys.find(macAddress) == deviceKeys.end()) {
+        Serial.printf("HATA: %s icin anahtar bulunamadi!\n", macAddress.c_str());
+        lastError = "Key Yok: " + macAddress;
+        return false;
+    }
+    
+    const uint8_t* key = deviceKeys[macAddress].data();
+
+    // Header 8 byte olmalı: 0x10, Len, ModelL, ModelH, Type, IV_L, IV_H, KeyCheck
+    if (len < 10) return false; 
     if (rawData[0] != 0x10) return false;
 
+    // Key Check (Byte 7) - Anahtarın ilk byte'ı ile eşleşmeli
+    if (rawData[7] != key[0]) {
+        Serial.printf("Key Check Hatasi: %02X != %02X\n", rawData[7], key[0]);
+        lastError = "Key Check Fail";
+        return false;
+    }
+
     // Victron Nonce Yapısı (AES-CTR)
+    // Fabian-Schmidt ve Victron dökümanlarına göre Nonce sadece Data Counter (IV) içerir.
+    // İlk 2 byte Data Counter, gerisi 0.
     uint8_t nonce[16] = {0};
-    nonce[0] = rawData[1]; // Model ID L
-    nonce[1] = rawData[2]; // Model ID H
-    nonce[2] = rawData[3]; // Readout Type
-    nonce[3] = rawData[4]; // IV LSB
-    nonce[4] = rawData[5]; // IV MSB
+    nonce[0] = rawData[5]; // IV LSB (Data Counter L)
+    nonce[1] = rawData[6]; // IV MSB (Data Counter H)
     // Kalanlar 0
 
-    size_t encryptedLen = len - 6;
-    const uint8_t* encryptedPtr = &rawData[6];
+    size_t encryptedLen = len - 8;
+    const uint8_t* encryptedPtr = &rawData[8];
 
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
     
-    int ret = mbedtls_aes_setkey_enc(&aes, aesKey, 128);
+    int ret = mbedtls_aes_setkey_enc(&aes, key, 128);
     if (ret != 0) return false;
 
     size_t nc_off = 0;
@@ -138,44 +159,55 @@ void VictronBLE::parseDecryptedData(const uint8_t* data, size_t len, VictronData
 }
 
 void VictronBLE::onResult(NimBLEAdvertisedDevice* advertisedDevice) {
+    // Sadece Manufacturer Data olan cihazlarla ilgileniyoruz
     if (!advertisedDevice->haveManufacturerData()) return;
 
     std::string manuData = advertisedDevice->getManufacturerData();
     
+    // Veri çok kısaysa yoksay
     if (manuData.length() < 4) return;
 
-    // Victron ID: 0x02E1
     uint8_t* data = (uint8_t*)manuData.data();
+
+    // Victron ID kontrolü: 0x02E1 (Little Endian -> E1 02)
+    // Ancak bazı durumlarda ID başta olmayabilir veya farklı olabilir.
+    // Debug için gördüğümüz tüm Manufacturer Data ID'lerini yazdıralım (kısa süreliğine)
+    // Serial.printf("BLE Device: %s, ManuID: %02X%02X\n", advertisedDevice->getAddress().toString().c_str(), data[0], data[1]);
+
     if (data[0] != 0xE1 || data[1] != 0x02) return;
     
-    Serial.printf("Victron Device Found: %s\n", advertisedDevice->getAddress().toString().c_str());
+    String mac = advertisedDevice->getAddress().toString().c_str();
+    lastSeenDevice = mac; // Son gorulen cihazi kaydet
+    Serial.printf("Victron Cihazi Bulundu: %s\n", mac.c_str());
 
     const uint8_t* victronPayload = &data[2];
     size_t victronLen = manuData.length() - 2;
     
-    // Header Kontrol
+    // Header Kontrol (0x10 = Victron BLE Protocol)
     if (victronPayload[0] != 0x10) {
-        Serial.printf("Invalid Header: %02X\n", victronPayload[0]);
+        Serial.printf("Gecersiz Header (%s): %02X\n", mac.c_str(), victronPayload[0]);
         return;
     }
 
-    uint16_t modelId = victronPayload[1] | (victronPayload[2] << 8);
-    uint8_t readoutType = victronPayload[3];
-
     uint8_t decrypted[32] = {0};
     
-    if (decryptData(victronPayload, victronLen, decrypted, modelId)) {
-        Serial.println("Decryption SUCCESS!");
-        String mac = advertisedDevice->getAddress().toString().c_str();
+    if (decryptData(mac, victronPayload, victronLen, decrypted)) {
+        Serial.printf("Sifre Cozme BASARILI: %s\n", mac.c_str());
         
         // Mevcut kaydı al veya yeni oluştur
         VictronData& devData = devices[mac];
         devData.macAddress = mac;
         
-        // Veriyi işle
-        parseDecryptedData(decrypted, victronLen - 6, devData, readoutType);
+        // Model ID ve Readout Type (Offset düzeltmesi: +1 kaydı)
+        // 0: 0x10, 1: Len, 2: ModelL, 3: ModelH, 4: Type
+        uint16_t modelId = victronPayload[2] | (victronPayload[3] << 8);
+        uint8_t readoutType = victronPayload[4];
+
+        // Veriyi işle (Header 8 byte olduğu için len - 8)
+        parseDecryptedData(decrypted, victronLen - 8, devData, readoutType);
     } else {
-        Serial.println("Decryption FAILED!");
+        // Şifre çözme başarısızsa nedenini anlamak için log
+        // Serial.printf("Sifre Cozme BASARISIZ: %s (Anahtar tanimli mi?)\n", mac.c_str());
     }
 }
 

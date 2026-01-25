@@ -176,6 +176,22 @@ void updateDisplay() {
         tft.setCursor(40, 80);
         tft.println("Veri Bekleniyor...");
         
+        // --- DEBUG BILGISI ---
+        if (victronScanner.lastSeenDevice.length() > 0) {
+             tft.setTextSize(1);
+             tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+             tft.setCursor(10, 165);
+             tft.printf("Son: %s", victronScanner.lastSeenDevice.c_str());
+        }
+        
+        if (victronScanner.lastError.length() > 0) {
+             tft.setTextSize(1);
+             tft.setTextColor(TFT_RED, TFT_BLACK);
+             tft.setCursor(10, 180);
+             tft.printf("Err: %s", victronScanner.lastError.c_str());
+        }
+        // ---------------------
+        
         if (isApMode) {
              tft.setTextSize(1);
              tft.setCursor(20, 120);
@@ -260,22 +276,16 @@ void setup() {
   setupWebServer();
   server.begin();
 
-  // BLE Başlat (Sadece WiFi Station modundaysa veya WiFi kapalıysa)
-  // AP Modunda BLE taraması WiFi performansını düşürebilir.
-  if (!isApMode) {
-      // TEST İÇİN SABİT KEY: 0102030405060708090a0b0c0d0e0f10
-      if (config_victronKey == "") {
-          config_victronKey = "0102030405060708090a0b0c0d0e0f10";
-          Serial.println("Test icin varsayilan Key atandi.");
-      }
-      victronScanner.setKey(config_victronKey);
-      Serial.println("BLE Baslatiliyor... (1s bekleme)");
-      delay(1000);
-      victronScanner.begin();
-      Serial.println("BLE Baslatildi.");
-  } else {
-      Serial.println("AP Modunda BLE Taramasi Devre Disi (WiFi Performansi Icin)");
-  }
+  // BLE Başlat (AP Modunda da çalışsın)
+    // Kullanıcının Cihazları
+    victronScanner.addDevice("c4:6e:65:94:c2:82", "f753c671e304071113866c4e8e52fd19"); // BMV
+    victronScanner.addDevice("d9:8b:71:bb:3f:1b", "f03ac1e836a789e14ca5d9a07aa165c3"); // Solar
+    victronScanner.addDevice("f1:2c:a4:ea:b1:42", "d9f9a31114a47b7d01f997ebcebbfdda"); // Dongle
+    
+    Serial.println("BLE Baslatiliyor... (1s bekleme)");
+    delay(1000);
+    victronScanner.begin();
+    Serial.println("BLE Baslatildi.");
   
   // Ekrana Son Durumu Bas
   Serial.println("Setup bitti. Ilk ekran guncellemesi...");
@@ -353,10 +363,10 @@ void loop() {
   // Captive Portal DNS İsteklerini İşle
   if (isApMode) {
       dnsServer.processNextRequest();
-  } else {
-      // Sadece AP modunda değilken BLE güncelle
-      victronScanner.update();
   }
+  
+  // BLE güncelle (Her zaman)
+  victronScanner.update();
 
   // Ekranı Güncelle
   updateDisplay();
