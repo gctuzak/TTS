@@ -17,7 +17,7 @@ extern VictronBLE victronScanner;
 // --- Değişkenler (main.cpp ile paylaşılacak) ---
 String config_ssid = "";
 String config_pass = "";
-String config_boatId = "Euphoria";
+String config_boatId = "";
 // Hardcoded Supabase Credentials
 String config_supabaseUrl = "https://rombkctiztzusujxezfh.supabase.co";
 String config_secret = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJvbWJrY3RpenR6dXN1anhlemZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkzMjU1MzYsImV4cCI6MjA4NDkwMTUzNn0.oWlvD0vb1s7wIUOsWEQYGwTf70_REx-fo2hZdSlveho";
@@ -29,9 +29,18 @@ void loadConfig() {
     config_ssid = preferences.getString("ssid", "");
     config_pass = preferences.getString("pass", "");
     
-    String storedBoatId = preferences.getString("boatId", "");
-    if (storedBoatId.length() > 0) {
-        config_boatId = storedBoatId;
+    
+    // Varsayılan boatId oluştur (MyBoat-XXXX)
+    String mac = WiFi.macAddress();
+    mac.replace(":", "");
+    String defaultBoatId = "MyBoat-" + mac.substring(8); // Son 4 hane
+    
+    // Eğer kayıtlı bir isim yoksa varsayılanı kullan
+    config_boatId = preferences.getString("boatId", defaultBoatId);
+    
+    // Güvenlik: Eğer hafızadan boş gelirse yine varsayılanı ata
+    if (config_boatId.length() == 0) {
+        config_boatId = defaultBoatId;
     }
     
     config_devicesJson = preferences.getString("devices", "[]");
