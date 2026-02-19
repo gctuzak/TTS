@@ -43,6 +43,14 @@ struct VictronData {
 
     float temperature = -999.0; // Varsa sıcaklık
     int alarm = 0;           // Alarm durumu
+
+    // Ekstra Veriler (Veritabanı Şeması İçin)
+    float maxPvVoltage = 0.0;    // Günlük Max Panel Voltajı
+    float maxPvPower = 0.0;      // Günlük Max Panel Gücü
+    float minBatteryVoltage = 0.0; // Günlük Min Akü Voltajı
+    float maxBatteryVoltage = 0.0; // Günlük Max Akü Voltajı
+    float totalYield = 0.0;      // Toplam Üretilen Enerji (Lifetime)
+    String chargeStateDesc = ""; // Şarj Durumu Açıklaması (Bulk, Abs, Float)
 };
 
 #include <map>
@@ -64,6 +72,7 @@ private:
 
 public:
     VictronBLE();
+    void init();
     void begin();
     void update();
     // Yeni cihaz ekleme fonksiyonu

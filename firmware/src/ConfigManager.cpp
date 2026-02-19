@@ -90,8 +90,7 @@ void setupWebServer() {
         Serial.println("SSID: " + ssid);
         Serial.println("Devices: " + devicesJson);
 
-        // Boşlukları temizle
-        ssid.trim(); pass.trim(); boatId.trim(); devicesJson.trim();
+        boatId.trim(); devicesJson.trim();
 
         if (ssid.length() > 0 && boatId.length() > 0) {
             saveConfig(ssid, pass, boatId, devicesJson);

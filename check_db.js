@@ -12,13 +12,13 @@ async function main() {
   // Check boats
   const { data: boats, error: boatsError } = await supabase
     .from('boats')
-    .select('count')
+    .select('*')
+    .limit(1)
   
   if (boatsError) {
     console.error('Error checking boats:', boatsError)
   } else {
-    console.log('Boats count:', boats.length) // Note: count is not returned like this with select('count') without head:true usually, but select('*', { count: 'exact', head: true }) is better.
-    // Let's just select * limit 1
+    console.log('Boat Record:', JSON.stringify(boats, null, 2))
   }
 
   const { count: boatsCount, error: countError } = await supabase
@@ -26,26 +26,39 @@ async function main() {
     .select('*', { count: 'exact', head: true })
     
   console.log('Boats exact count:', boatsCount, 'Error:', countError)
-
-  // Check telemetry
+  
   const { count: telemetryCount, error: telError } = await supabase
     .from('telemetry')
     .select('*', { count: 'exact', head: true })
-
-  console.log('Telemetry exact count:', telemetryCount, 'Error:', telError)
   
-  if (telemetryCount > 0) {
-      console.log('Data found! Proceeding to delete...')
-      // Delete all
-      // Since we don't have DELETE ALL permission usually without Where, we might need a condition.
-      // But let's try.
-      const { error: delError } = await supabase
-        .from('telemetry')
-        .delete()
-        .neq('id', 0) // Delete all where id != 0 (assuming id is positive)
-        
-      console.log('Delete result:', delError || 'Success')
+  console.log('Telemetry exact count:', telemetryCount, 'Error:', telError)
+
+  const { data: latestTelemetry, error: latestError } = await supabase
+    .from('telemetry')
+    .select('id, created_at, boat_id, voltage, current')
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  if (latestError) {
+    console.error('Error fetching latest telemetry:', latestError)
+  } else {
+    console.log('Latest telemetry rows:', JSON.stringify(latestTelemetry, null, 2))
   }
+
+  const testPayload = [
+    {
+      mac_address: '08:3a:f2:67:92:d0',
+      boat_name: 'Test Boat (Node)',
+      voltage: 12.3,
+      current: 1.2
+    }
+  ]
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc('ingest_telemetry', {
+    payload: testPayload
+  })
+
+  console.log('RPC ingest_telemetry result:', rpcData, 'Error:', rpcError)
 }
 
 main()

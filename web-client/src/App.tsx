@@ -32,6 +32,12 @@ interface TelemetryRow {
   device_type: number | null
   yield_today: number | null
   efficiency: number | null
+  charge_state: string | null
+  total_yield: number | null
+  max_pv_voltage: number | null
+  max_pv_power: number | null
+  min_battery_voltage: number | null
+  max_battery_voltage: number | null
 }
 
 interface Boat {

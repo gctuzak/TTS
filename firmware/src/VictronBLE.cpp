@@ -45,10 +45,13 @@ void VictronBLE::addDevice(String mac, String keyHex) {
     Serial.printf("Cihaz eklendi: %s (Key: %s)\n", mac.c_str(), keyHex.c_str());
 }
 
-void VictronBLE::begin() {
+void VictronBLE::init() {
     Serial.printf("Free Heap before BLE init: %d\n", ESP.getFreeHeap());
     Serial.println("BLE: NimBLE init...");
     NimBLEDevice::init("");
+}
+
+void VictronBLE::begin() {
     Serial.println("BLE: getScan...");
     pBLEScan = NimBLEDevice::getScan();
     Serial.println("BLE: setCallbacks...");
@@ -136,6 +139,19 @@ void VictronBLE::parseDecryptedData(const uint8_t* data, size_t len, VictronData
         result.type = SOLAR_CHARGER;
         // 0: State (u8)
         result.deviceState = data[0];
+        // Durum açıklaması (Victron MPPT State Codes)
+        switch (result.deviceState) {
+            case 0: result.chargeStateDesc = "Off"; break;
+            case 2: result.chargeStateDesc = "Fault"; break;
+            case 3: result.chargeStateDesc = "Bulk"; break;
+            case 4: result.chargeStateDesc = "Absorption"; break;
+            case 5: result.chargeStateDesc = "Float"; break;
+            case 7: result.chargeStateDesc = "Equalize"; break;
+            case 245: result.chargeStateDesc = "WakeUp"; break;
+            case 252: result.chargeStateDesc = "Ext.Control"; break;
+            default: result.chargeStateDesc = "Unknown"; break;
+        }
+
         // 1: Error (u8)
         result.alarm = data[1];
         // 2-3: Battery Voltage (s16, 0.01V)
@@ -277,8 +293,12 @@ void VictronBLE::onResult(NimBLEAdvertisedDevice* advertisedDevice) {
     size_t victronLen = manuData.length() - 2;
     
     // Header Kontrol (0x10 = Victron BLE Protocol)
-    if (victronPayload[0] != 0x10) {
-        Serial.printf("Gecersiz Header (%s): %02X\n", mac.c_str(), victronPayload[0]);
+    uint8_t header = victronPayload[0];
+    if (header != 0x10) {
+        // DEBUG: Ham Veriyi Bas
+        Serial.printf("Victron Cihazi (MAC: %s) -> Header: %02X, Data: ", mac.c_str(), header);
+        for(size_t i=0; i<manuData.length(); i++) Serial.printf("%02X ", (uint8_t)manuData[i]);
+        Serial.println();
         return;
     }
 

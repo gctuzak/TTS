@@ -25,6 +25,12 @@ interface TelemetryRow {
   device_type: number | null
   yield_today: number | null
   efficiency: number | null
+  charge_state: string | null
+  total_yield: number | null
+  max_pv_voltage: number | null
+  max_pv_power: number | null
+  min_battery_voltage: number | null
+  max_battery_voltage: number | null
 }
 
 interface DeviceDetailProps {
@@ -98,6 +104,7 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name }) => {
   // Calculations if missing
   const batteryPower = device.power ?? (device.voltage && device.current ? device.voltage * device.current : 0);
   const pvCurrent = device.pv_current ?? (device.pv_power && device.pv_voltage ? device.pv_power / device.pv_voltage : 0);
+  const chargeStateLabel = device.charge_state || (mpptStates[device.device_state || 0] || 'Bilinmiyor');
 
   return (
     <div className="bg-[#1e88e5] text-white rounded-xl overflow-hidden shadow-lg max-w-sm mx-auto mb-4 font-sans">
@@ -167,7 +174,7 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name }) => {
             <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Akü</div>
             <DetailRow icon={<Battery size={18} />} label="Voltaj" value={fmt(device.voltage, 'V')} />
             <DetailRow icon={<Activity size={18} />} label="Akım" value={fmt(device.current, 'A')} />
-            <DetailRow icon={<Activity size={18} />} label="Durum" value={mpptStates[device.device_state || 0] || 'Bilinmiyor'} />
+            <DetailRow icon={<Activity size={18} />} label="Durum" value={chargeStateLabel} />
             
             <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Virtüel yük çıkışı</div>
             <DetailRow icon={<Activity size={18} />} label="Durum" value={device.load_state === 1 ? 'Açık' : 'Kapalı'} />
@@ -176,8 +183,9 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name }) => {
             <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Diğer</div>
             <DetailRow icon={<Zap size={18} />} label="Günlük Üretim" value={fmt(device.yield_today, 'kWh')} />
             <DetailRow icon={<Activity size={18} />} label="Verim" value={fmt(device.efficiency, '%')} />
-            <DetailRow icon={<Power size={18} />} label="Pmax" value="--" />
-            <DetailRow icon={<Sun size={18} />} label="Vmax" value="--" />
+            <DetailRow icon={<Power size={18} />} label="Toplam Üretim" value={fmt(device.total_yield, 'kWh')} />
+            <DetailRow icon={<Power size={18} />} label="Pmax" value={fmt(pmax, 'W', 0)} />
+            <DetailRow icon={<Sun size={18} />} label="Vmax" value={fmt(vmax, 'V')} />
           </>
         )}
         
