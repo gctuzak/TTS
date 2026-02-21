@@ -405,17 +405,11 @@ void setup() {
         }
         
         int attempts = 0;
-        while (WiFi.status() != WL_CONNECTED && attempts < 60) { // 30 saniye
+        while (WiFi.status() != WL_CONNECTED && attempts < 20) { // 10 saniye (Süre kısaltıldı)
             delay(500);
             Serial.print(".");
             tft.setCursor(10 + (attempts * 5), 60);
             tft.print(".");
-            
-            // Eğer 20 denemeden sonra hala bağlanmadıysa ve kanal kullanıyorsak, kanalsız dene
-            if (attempts == 20 && targetChannel > 0) {
-                Serial.println("\nKanal ile baglanti basarisiz, normal deneniyor...");
-                WiFi.begin(config_ssid.c_str(), config_pass.c_str());
-            }
             
             attempts++;
         }
@@ -443,12 +437,8 @@ void setup() {
   if (isApMode) {
       Serial.println("AP Modu Baslatiliyor...");
       
-      WiFi.persistent(false);
-      WiFi.disconnect(true, true);
-      delay(1000);
-      
-      WiFi.mode(WIFI_AP);
-      delay(500);
+      WiFi.mode(WIFI_AP); // Persistent kapatıldı, direkt AP modu
+      delay(100);
       
       // AP Yapılandırması (IP adresi varsayılan 192.168.4.1 olsun)
       IPAddress apIP(192, 168, 4, 1);
@@ -456,7 +446,7 @@ void setup() {
       IPAddress subnet(255, 255, 255, 0);
       WiFi.softAPConfig(apIP, gateway, subnet);
       
-      bool apResult = WiFi.softAP("VictronMonitor_Setup", "12345678", 6, 0, 4); // Kanal 6, gizli değil, max 4 bağlantı
+      bool apResult = WiFi.softAP("VictronMonitor_Setup", "12345678", 1, 0, 4); // Kanal 1
       if (apResult) {
           Serial.println("AP Basariyla Baslatildi!");
           Serial.print("AP SSID: "); Serial.println("VictronMonitor_Setup");

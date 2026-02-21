@@ -49,12 +49,18 @@ function App() {
   const [session, setSession] = useState<any>(null)
   const [boat, setBoat] = useState<Boat | null>(null)
   const [loading, setLoading] = useState(true)
-  
+  const [needsClaim, setNeedsClaim] = useState(false)
+  const [boatNameInput, setBoatNameInput] = useState("")
+  const [claimError, setClaimError] = useState("")
+
   // Cihaz bazlı son verileri tutan map: mac_address -> TelemetryRow
   const [deviceMap, setDeviceMap] = useState<Record<string, TelemetryRow>>({})
-  
+
   // Geçmiş verileri (Grafik için)
   const [historyData, setHistoryData] = useState<any[]>([])
+
+  // Günlük maksimum veriler map: mac_address -> {pmax, vmax}
+  const [maxDataMap, setMaxDataMap] = useState<Record<string, { pmax: number, vmax: number }>>({})
 
   // Oturum kontrolü
   useEffect(() => {
@@ -77,14 +83,16 @@ function App() {
     if (!session) {
       setBoat(null)
       setDeviceMap({})
+      setNeedsClaim(false) // Oturum yoksa claim ekranı gösterme
       return
     }
 
     const fetchBoat = async () => {
-      // En son eklenen tekneyi al (Varsa Euphoria veya kullanıcının oluşturduğu son tekne)
+      // 1. Sadece giriş yapan kullanıcıya (session.user.id) ait en son yüklenen tekneyi bul
       let { data, error } = await supabase
         .from('boats')
         .select('*')
+        .eq('user_id', session.user.id) // DEĞİŞİKLİK: Sadece bu kullanıcının tekneleri
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -93,46 +101,43 @@ function App() {
         console.error('Tekne verisi çekilemedi:', error)
       }
 
-      // Eğer hiç tekne yoksa, otomatik oluştur
+      // Eğer kullanıcının teknesi yoksa eşleştirme (tekne kurma) ekranına yönlendir
       if (!data) {
-        console.log("Hiç tekne bulunamadı, varsayılan tekne oluşturuluyor...")
-        const { data: newBoat, error: createError } = await supabase
-          .from('boats')
-          .insert({
-             name: 'Euphoria', // Firmware ile eşleşmesi için
-             user_id: session.user.id, // Sahip olarak mevcut kullanıcıyı ata
-             device_secret: 'default-secret' // Basit bir secret
-          })
-          .select()
-          .single()
-        
-        if (createError) {
-             console.error("Otomatik tekne oluşturma hatası:", createError)
-        } else {
-             data = newBoat
-        }
-      }
-
-      if (data) {
+        setNeedsClaim(true)
+        setBoat(null)
+      } else {
+        setNeedsClaim(false)
         setBoat(data)
-        
-        // İlk veri yüklemesi (Son durum)
+
+        // 2. Yeni VIEW üzerinden cihazların en son durumlarını tek seferde ve eksiksiz çek.
+        // limit(50) kaldırıldı çünkü artık her cihazın sadece güncel 1 satırı gelecek.
+        // DİKKAT: Telemetry tablosunda boat_id hala UUID olduğu için eşleştirmeyi id üzerinden yapıyoruz.
+        // ESP32 veriyi ismiyle (boat_name) atıyor, muhtemelen backend (ingest_telemetry) bunu UUID'ye çevirip kaydediyor.
         const { data: initialData } = await supabase
-          .from('telemetry')
+          .from('latest_device_telemetry') // DEĞİŞİKLİK: View kullanıyoruz
           .select('*')
           .eq('boat_id', data.id)
-          .order('created_at', { ascending: false })
-          .limit(50)
 
         if (initialData) {
           const map: Record<string, TelemetryRow> = {}
-          // Eskiden yeniye işleyerek son durumu bul
-          initialData.reverse().forEach(row => {
+          initialData.forEach(row => {
             if (row.mac_address) {
               map[row.mac_address] = row
             }
           })
           setDeviceMap(map)
+        }
+
+        // 3. Günlük Pmax ve Vmax değerlerini RPC ile çek
+        const { data: maxValues } = await supabase.rpc('get_daily_max_values', { p_boat_id: data.id })
+        if (maxValues) {
+          const tempMaxMap: Record<string, { pmax: number, vmax: number }> = {}
+          maxValues.forEach((row: any) => {
+            if (row.mac_address) {
+              tempMaxMap[row.mac_address] = { pmax: row.pmax, vmax: row.vmax }
+            }
+          })
+          setMaxDataMap(tempMaxMap)
         }
 
         // Realtime Abonelik
@@ -151,9 +156,9 @@ function App() {
               if (newRow.mac_address) {
                 setDeviceMap(prev => ({
                   ...prev,
-                  [newRow.mac_address]: newRow
+                  [`${newRow.mac_address}`]: newRow
                 }))
-                
+
                 // Grafik verisi güncelleme
                 if (newRow.voltage) {
                   setHistoryData(prev => {
@@ -216,6 +221,56 @@ function App() {
     }
   }, [deviceMap])
 
+  // Türkçe Karakter Temizleme (Opsiyonel / Normalizasyon)
+  const normalizeString = (str: string) => {
+    return str.trim()
+      .replace(/ı/g, 'i')
+      .replace(/ğ/g, 'g')
+      .replace(/ü/g, 'u')
+      .replace(/ş/g, 's')
+      .replace(/ö/g, 'o')
+      .replace(/ç/g, 'c')
+      .replace(/İ/g, 'I')
+      .replace(/Ğ/g, 'G')
+      .replace(/Ü/g, 'U')
+      .replace(/Ş/g, 'S')
+      .replace(/Ö/g, 'O')
+      .replace(/Ç/g, 'C')
+      .toUpperCase() // ESP32 ile eşleştirmede hata riskini minimuma indirmek için tamamen büyültebiliriz
+  }
+
+  // Yeni Tekne (Sistem) Kurulum İşlemi
+  const handleRegisterBoat = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setClaimError("")
+
+    if (!boatNameInput || boatNameInput.trim().length < 3) {
+      setClaimError("Lütfen teknenizin adını en az 3 karakter olacak şekilde girin.")
+      return
+    }
+
+    // İsmi standartlaştıralım 
+    // (Böylece kullanıcı telefondan 'Yakamoz' yazsa bile sistem kolayca eşleşir)
+    const normalizedName = normalizeString(boatNameInput)
+
+    // Sadece adı ve user_id'si ile oluştur
+    const { error: insertError } = await supabase
+      .from('boats')
+      .insert({
+        name: normalizedName,
+        user_id: session.user.id,
+        device_secret: normalizedName // Artık secret ve id aynı şey oldu.
+      })
+
+    if (insertError) {
+      setClaimError("Tekne adı kaydedilirken bir hata oluştu: " + insertError.message)
+      return
+    }
+
+    // 3. Başarılı kayıt: Sayfayı yenile veya fetchBoat mantığını tekrar çağır
+    window.location.reload()
+  }
+
   if (loading) {
     return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">Yükleniyor...</div>
   }
@@ -224,13 +279,53 @@ function App() {
     return <Auth />
   }
 
+  if (needsClaim) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white p-4 font-sans">
+        <div className="max-w-md w-full bg-gray-900 rounded-xl p-8 shadow-2xl border border-gray-800">
+          <div className="mb-8 text-center">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+              Sisteme Hoş Geldiniz
+            </h1>
+            <p className="text-gray-400 mt-2 text-sm">
+              Takibini yapmak istediğiniz teknenin adını aşağıya girin. (Örn: YAKAMOZ) <br /><br />
+              <strong className="text-yellow-400">ÖNEMLI:</strong> Bu adı, ESP32 cihazınızı Wi-Fi uzerinden ayarlarken <strong>Boat ID</strong> alanına birebir aynı yazmalısınız.
+            </p>
+          </div>
+
+          <form onSubmit={handleRegisterBoat} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Tekne Adı (Boat Name)
+              </label>
+              <input
+                type="text"
+                value={boatNameInput}
+                onChange={(e) => setBoatNameInput(e.target.value)}
+                placeholder="Örn: YAKAMOZ"
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-500 uppercase"
+              />
+            </div>
+            {claimError && <div className="text-red-400 text-sm text-center">{claimError}</div>}
+            <button
+              type="submit"
+              className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold rounded-lg shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+            >
+              Kaydet ve Başla
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
   // Hata yakalama için basit bir kontrol (Normalde ErrorBoundary kullanılır)
   try {
     if (!boat) {
       return (
         <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white p-4">
-            <h1 className="text-2xl mb-4">Tekne Bilgisi Yükleniyor...</h1>
-            <p className="text-gray-400">Veritabanı bağlantısı kuruluyor.</p>
+          <h1 className="text-2xl mb-4">Tekne Bilgisi Yükleniyor...</h1>
+          <p className="text-gray-400">Veritabanı bağlantısı kuruluyor.</p>
         </div>
       )
     }
@@ -252,7 +347,7 @@ function App() {
               </span>
               Canlı
             </div>
-            <button 
+            <button
               onClick={() => supabase.auth.signOut()}
               className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
               title="Çıkış Yap"
@@ -265,7 +360,7 @@ function App() {
         <main className="max-w-7xl mx-auto space-y-8">
           {/* Üst Kısım: Akış Şeması */}
           <section>
-            <SystemFlow 
+            <SystemFlow
               pvPower={dashboardData.pvPower}
               batteryPower={dashboardData.batteryPower}
               loadPower={dashboardData.loadPower}
@@ -275,31 +370,31 @@ function App() {
 
           {/* Orta Kısım: İstatistik Kartları */}
           <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard 
-              title="Akü Voltajı" 
-              value={dashboardData.voltage.toFixed(1)} 
-              unit="V" 
+            <StatCard
+              title="Akü Voltajı"
+              value={dashboardData.voltage.toFixed(1)}
+              unit="V"
               color="blue"
               icon={<Battery className="text-blue-400" size={20} />}
             />
-            <StatCard 
-              title="Solar Güç" 
-              value={dashboardData.pvPower.toFixed(0)} 
-              unit="W" 
+            <StatCard
+              title="Solar Güç"
+              value={dashboardData.pvPower.toFixed(0)}
+              unit="W"
               color="yellow"
               icon={<Sun className="text-yellow-400" size={20} />}
             />
-            <StatCard 
-              title="Yük Tüketimi" 
-              value={dashboardData.loadPower.toFixed(0)} 
-              unit="W" 
+            <StatCard
+              title="Yük Tüketimi"
+              value={dashboardData.loadPower.toFixed(0)}
+              unit="W"
               color="red"
               icon={<Zap className="text-red-400" size={20} />}
             />
-            <StatCard 
-              title="Kalan Süre" 
-              value={dashboardData.remaining === 0 ? '--' : `${Math.floor(dashboardData.remaining / 60)}s ${dashboardData.remaining % 60}d`} 
-              unit="" 
+            <StatCard
+              title="Kalan Süre"
+              value={dashboardData.remaining === 0 ? '--' : `${Math.floor(dashboardData.remaining / 60)}s ${dashboardData.remaining % 60}d`}
+              unit=""
               color="green"
               icon={<Clock className="text-green-400" size={20} />}
             />
@@ -314,13 +409,18 @@ function App() {
           <section>
             <h2 className="text-xl font-bold mb-4 text-gray-300">Cihaz Detayları</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Object.values(deviceMap).map((device) => (
-                <DeviceDetail 
-                  key={device.mac_address} 
-                  device={device} 
-                  name={device.device_type === 1 ? 'Solar Charger' : (device.device_type === 2 ? 'Battery Monitor' : device.mac_address || 'Cihaz')} 
-                />
-              ))}
+              {Object.values(deviceMap).map((device) => {
+                const maxes = device.mac_address ? maxDataMap[device.mac_address] : null
+                return (
+                  <DeviceDetail
+                    key={device.mac_address || device.id}
+                    device={device}
+                    pmax={maxes?.pmax ?? null}
+                    vmax={maxes?.vmax ?? null}
+                    name={device.device_type === 1 ? 'Solar Charger' : (device.device_type === 2 ? 'Battery Monitor' : device.mac_address || 'Cihaz')}
+                  />
+                )
+              })}
             </div>
           </section>
         </main>

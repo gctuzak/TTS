@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Battery, Zap, Sun, Clock, Power, Activity, Thermometer } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import React from 'react';
+import { Battery, Zap, Sun, Clock, Power, Activity } from 'lucide-react';
 
 interface TelemetryRow {
   id: number
@@ -36,59 +35,16 @@ interface TelemetryRow {
 interface DeviceDetailProps {
   device: TelemetryRow;
   name?: string;
+  pmax?: number | null; // OPTIMİZASYON: Dışarıdan prop olarak alınıyor
+  vmax?: number | null; // OPTIMİZASYON: Dışarıdan prop olarak alınıyor
 }
 
-export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name }) => {
+export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, vmax }) => {
   const isSolar = device.device_type === 1;
   const isBattery = device.device_type === 2;
-  
-  const [pmax, setPmax] = useState<number | null>(null);
-  const [vmax, setVmax] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!isSolar || !device.boat_id || !device.mac_address) return;
-
-    const fetchMaxValues = async () => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      // Pmax Fetch
-      const { data: pData } = await supabase
-        .from('telemetry')
-        .select('pv_power')
-        .eq('boat_id', device.boat_id)
-        .eq('mac_address', device.mac_address)
-        .gte('created_at', today.toISOString())
-        .order('pv_power', { ascending: false })
-        .limit(1);
-
-      if (pData && pData.length > 0) {
-        setPmax(pData[0].pv_power);
-      }
-
-      // Vmax Fetch (Eğer pv_voltage varsa)
-      const { data: vData } = await supabase
-        .from('telemetry')
-        .select('pv_voltage')
-        .eq('boat_id', device.boat_id)
-        .eq('mac_address', device.mac_address)
-        .gte('created_at', today.toISOString())
-        .order('pv_voltage', { ascending: false })
-        .limit(1);
-
-      if (vData && vData.length > 0) {
-        setVmax(vData[0].pv_voltage);
-      }
-    };
-
-    fetchMaxValues();
-    // Her 1 dakikada bir güncelle
-    const interval = setInterval(fetchMaxValues, 60000);
-    return () => clearInterval(interval);
-  }, [device.boat_id, device.mac_address, isSolar]);
 
   // Format Helpers
-  const fmt = (val: number | null | undefined, unit: string, decimals = 2) => 
+  const fmt = (val: number | null | undefined, unit: string, decimals = 2) =>
     (val !== null && val !== undefined && !isNaN(val)) ? `${Number(val).toFixed(decimals)}${unit}` : '--';
 
   // MPPT State Map
@@ -147,7 +103,7 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name }) => {
 
       {/* Details List */}
       <div className="bg-[#1565c0]">
-        
+
         {isBattery && (
           <>
             <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Çıkış</div>
@@ -156,10 +112,10 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name }) => {
             <DetailRow icon={<Power size={18} />} label="Güç" value={fmt(batteryPower, 'W', 0)} />
             <DetailRow icon={<Clock size={18} />} label="Ah tüketildi" value={fmt(device.consumed_ah, 'Ah', 1)} />
             <DetailRow icon={<Clock size={18} />} label="Kalan süre" value={device.remaining_mins === -1 || !device.remaining_mins ? '--' : `${Math.floor(device.remaining_mins / 60)}s ${device.remaining_mins % 60}d`} />
-            
+
             <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Giriş</div>
             <DetailRow icon={<Battery size={18} />} label="Marş aküsü" value={fmt(device.aux_voltage, 'V')} />
-            
+
             <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Röle</div>
             <DetailRow icon={<Activity size={18} />} label="Durum" value={device.alarm ? 'Kapalı' : 'Açık'} />
           </>
@@ -170,12 +126,12 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name }) => {
             <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Solar</div>
             <DetailRow icon={<Sun size={18} />} label="Voltaj" value={fmt(device.pv_voltage, 'V')} />
             <DetailRow icon={<Activity size={18} />} label="Akım" value={fmt(pvCurrent, 'A')} />
-            
+
             <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Akü</div>
             <DetailRow icon={<Battery size={18} />} label="Voltaj" value={fmt(device.voltage, 'V')} />
             <DetailRow icon={<Activity size={18} />} label="Akım" value={fmt(device.current, 'A')} />
             <DetailRow icon={<Activity size={18} />} label="Durum" value={chargeStateLabel} />
-            
+
             <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Virtüel yük çıkışı</div>
             <DetailRow icon={<Activity size={18} />} label="Durum" value={device.load_state === 1 ? 'Açık' : 'Kapalı'} />
             <DetailRow icon={<Zap size={18} />} label="Akım" value={fmt(device.load_current, 'A')} />
@@ -188,7 +144,7 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name }) => {
             <DetailRow icon={<Sun size={18} />} label="Vmax" value={fmt(vmax, 'V')} />
           </>
         )}
-        
+
         {/* Padding bottom */}
         <div className="h-4"></div>
       </div>
