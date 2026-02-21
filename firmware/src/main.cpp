@@ -328,6 +328,38 @@ void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     }
 }
 
+void startAP() {
+    Serial.println("AP Modu Baslatiliyor...");
+    isApMode = true;
+    
+    WiFi.disconnect(); 
+    WiFi.mode(WIFI_AP); 
+    delay(100);
+    
+    // AP Yapılandırması (IP adresi varsayılan 192.168.4.1 olsun)
+    IPAddress apIP(192, 168, 4, 1);
+    IPAddress gateway(192, 168, 4, 1);
+    IPAddress subnet(255, 255, 255, 0);
+    WiFi.softAPConfig(apIP, gateway, subnet);
+    
+    bool apResult = WiFi.softAP("VictronMonitor_Setup", "12345678", 1, 0, 4); // Kanal 1
+    if (apResult) {
+        Serial.println("AP Basariyla Baslatildi!");
+        Serial.print("AP SSID: "); Serial.println("VictronMonitor_Setup");
+        Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
+    } else {
+        Serial.println("AP BASLATILAMADI!");
+    }
+    
+    delay(500);
+    apTimeout = millis();
+    
+    // Captive Portal için DNS Sunucusunu Başlat
+    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+    dnsServer.start(53, "*", WiFi.softAPIP());
+    Serial.println("DNS Sunucusu Baslatildi (Captive Portal)");
+}
+
 void setup() {
   Serial.begin(115200);
   
@@ -435,33 +467,7 @@ void setup() {
   
   // Eğer bağlantı yoksa AP Modunu başlat
   if (isApMode) {
-      Serial.println("AP Modu Baslatiliyor...");
-      
-      WiFi.mode(WIFI_AP); // Persistent kapatıldı, direkt AP modu
-      delay(100);
-      
-      // AP Yapılandırması (IP adresi varsayılan 192.168.4.1 olsun)
-      IPAddress apIP(192, 168, 4, 1);
-      IPAddress gateway(192, 168, 4, 1);
-      IPAddress subnet(255, 255, 255, 0);
-      WiFi.softAPConfig(apIP, gateway, subnet);
-      
-      bool apResult = WiFi.softAP("VictronMonitor_Setup", "12345678", 1, 0, 4); // Kanal 1
-      if (apResult) {
-          Serial.println("AP Basariyla Baslatildi!");
-          Serial.print("AP SSID: "); Serial.println("VictronMonitor_Setup");
-          Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
-      } else {
-          Serial.println("AP BASLATILAMADI!");
-      }
-      
-      delay(500);
-      apTimeout = millis();
-      
-      // Captive Portal için DNS Sunucusunu Başlat
-      dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-      dnsServer.start(53, "*", WiFi.softAPIP());
-      Serial.println("DNS Sunucusu Baslatildi (Captive Portal)");
+      startAP();
   }
 
   // Web Sunucusunu Başlat (ConfigManager)
@@ -647,19 +653,25 @@ void loop() {
                Serial.printf("Basili Sure: %lu ms\n", pressDuration);
           }
 
-          if (pressDuration > 5000) {
-              tft.fillScreen(TFT_RED);
-              tft.setTextColor(TFT_WHITE, TFT_RED);
+          if (pressDuration > 3000) {
+              tft.fillScreen(TFT_BLUE);
+              tft.setTextColor(TFT_WHITE, TFT_BLUE);
               tft.setTextSize(2);
               tft.setCursor(10, 60);
-              tft.println("AYARLAR");
+              tft.println("AP MODU");
               tft.setCursor(10, 90);
-              tft.println("SIFIRLANIYOR...");
+              tft.println("ACILIYOR...");
               
-              Serial.println("Boot butonuna 5sn basildi. Sifirlaniyor...");
-              resetConfig();
-              delay(2000);
-              ESP.restart();
+              Serial.println("Boot butonuna basildi. AP Moduna geciliyor...");
+              
+              // Buton bırakılana kadar bekle
+              while(digitalRead(BOOT_BUTTON) == LOW) { delay(100); }
+              
+              startAP();
+              
+              bootBtnPressed = false;
+              bootBtnTimer = 0;
+              updateDisplay();
           }
       }
   } else {

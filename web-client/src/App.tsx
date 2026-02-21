@@ -393,7 +393,7 @@ function App() {
             />
             <StatCard
               title="Kalan Süre"
-              value={dashboardData.remaining === 0 ? '--' : `${Math.floor(dashboardData.remaining / 60)}s ${dashboardData.remaining % 60}d`}
+              value={dashboardData.remaining <= 0 ? '--' : `${Math.floor(dashboardData.remaining / 60)}s ${dashboardData.remaining % 60}d`}
               unit=""
               color="green"
               icon={<Clock className="text-green-400" size={20} />}

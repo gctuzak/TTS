@@ -65,9 +65,17 @@ void VictronBLE::begin() {
     Serial.println("BLE: begin finished.");
 }
 
+void scanEndedCB(NimBLEScanResults results) {
+    // Tarama bitti, sonuçlar işlendi.
+    // Serial.println("BLE Scan Tamamlandi.");
+}
+
 void VictronBLE::update() {
     if(!pBLEScan->isScanning()) {
-        pBLEScan->start(5, false);
+        // Asenkron (Non-blocking) tarama başlat
+        // 5 saniye sürecek, bittiğinde scanEndedCB çağrılacak.
+        // Bu sayede loop() döngüsü bloklanmaz ve buton çalışır.
+        pBLEScan->start(5, scanEndedCB, false);
     }
 }
 
