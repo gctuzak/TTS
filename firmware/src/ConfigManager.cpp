@@ -19,8 +19,8 @@ String config_ssid = "";
 String config_pass = "";
 String config_boatId = "";
 // Hardcoded Supabase Credentials
-String config_supabaseUrl = "https://rombkctiztzusujxezfh.supabase.co";
-String config_secret = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJvbWJrY3RpenR6dXN1anhlemZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkzMjU1MzYsImV4cCI6MjA4NDkwMTUzNn0.oWlvD0vb1s7wIUOsWEQYGwTf70_REx-fo2hZdSlveho";
+String config_supabaseUrl = "https://tts-db.gergitavan.tr";
+String config_secret = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc3NDc5NjgyMCwiZXhwIjo0OTMwNDcwNDIwLCJyb2xlIjoiYW5vbiJ9.CK5wj0bZD5ZqDYEJXtbOEkEYtyeFuf4fgt46BtAVyWE";
 String config_devicesJson = "[]";
 
 // Ayarları Yükle
@@ -109,11 +109,6 @@ void setupWebServer() {
         // Şifreyi gönderme (güvenlik)
         doc["boatId"] = config_boatId;
         
-        // Cihaz listesini JSON string'den parse et ve objeye ekle
-        // Not: devicesJson string'i içinde zaten JSON formatında veri var, bunu direkt string olarak değil
-        // JSON array olarak response'a koymak daha temiz olur ama basitlik için raw string olarak da parse edilebilir.
-        // Ancak burada düzgün bir JSON yapısı kuralım.
-        
         DynamicJsonDocument devicesDoc(2048);
         DeserializationError error = deserializeJson(devicesDoc, config_devicesJson);
         
@@ -123,6 +118,22 @@ void setupWebServer() {
             doc["devices"] = JsonArray(); // Boş dizi
         }
 
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    });
+
+    // API: Etraftaki WiFi Ağlarını Tara
+    server.on("/api/wifi-scan", HTTP_GET, [](AsyncWebServerRequest *request){
+        int n = WiFi.scanNetworks();
+        DynamicJsonDocument doc(2048);
+        JsonArray arr = doc.to<JsonArray>();
+        
+        for (int i = 0; i < n; ++i) {
+            // Aynı isimdeki ağları (farklı frekans/MAC) tekrarlamamak için basit kontrol eklenebilir ama direkt basalım
+            arr.add(WiFi.SSID(i));
+        }
+        
         String response;
         serializeJson(doc, response);
         request->send(200, "application/json", response);

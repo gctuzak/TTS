@@ -68,6 +68,7 @@ void VictronBLE::begin() {
 void scanEndedCB(NimBLEScanResults results) {
     // Tarama bitti, sonuçlar işlendi.
     // Serial.println("BLE Scan Tamamlandi.");
+    NimBLEDevice::getScan()->clearResults(); // Bellek sızıntısını önlemek için sonuçları temizle
 }
 
 void VictronBLE::update() {

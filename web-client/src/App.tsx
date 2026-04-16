@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { Auth } from './components/Auth'
 import { SystemFlow } from './components/SystemFlow'
 import { StatCard } from './components/StatCard'
 import { HistoryCharts } from './components/HistoryCharts'
 import { DeviceDetail } from './components/DeviceDetail'
-import { Battery, Zap, Sun, Clock, LogOut } from 'lucide-react'
+import { Battery, Zap, Sun, Clock, LogOut, Settings, DownloadCloud } from 'lucide-react'
 import './App.css'
 
 // Veritabanı tipleri
@@ -52,8 +53,12 @@ function App() {
   const [needsClaim, setNeedsClaim] = useState(false)
   const [boatNameInput, setBoatNameInput] = useState("")
   const [claimError, setClaimError] = useState("")
+  const [debugLog, setDebugLog] = useState<string>("")
+  const [isAdmin, setIsAdmin] = useState(false)
+  const navigate = useNavigate()
 
   // Cihaz bazlı son verileri tutan map: mac_address -> TelemetryRow
+
   const [deviceMap, setDeviceMap] = useState<Record<string, TelemetryRow>>({})
 
   // Geçmiş verileri (Grafik için)
@@ -88,37 +93,49 @@ function App() {
     }
 
     const fetchBoat = async () => {
-      // 1. Sadece giriş yapan kullanıcıya (session.user.id) ait en son yüklenen tekneyi bul
-      let { data, error } = await supabase
-        .from('boats')
-        .select('*')
-        .eq('user_id', session.user.id) // DEĞİŞİKLİK: Sadece bu kullanıcının tekneleri
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (error) {
-        console.error('Tekne verisi çekilemedi:', error)
+      // Profil rolünü kontrol et
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
+        
+      if (profile && profile.role === 'admin') {
+        setIsAdmin(true)
       }
 
-      // Eğer kullanıcının teknesi yoksa eşleştirme (tekne kurma) ekranına yönlendir
-      if (!data) {
-        setNeedsClaim(true)
-        setBoat(null)
-      } else {
-        setNeedsClaim(false)
-        setBoat(data)
+      // 1. Sadece giriş yapan kullanıcıya (session.user.id) ait en son yüklenen tekneyi bul
+        let { data, error } = await supabase
+          .from('boats')
+          .select('*')
+          .eq('user_id', session.user.id) // DEĞİŞİKLİK: Sadece bu kullanıcının tekneleri
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (error) {
+          console.error('Tekne verisi çekilemedi:', error)
+          setDebugLog("Boats hatası: " + error.message)
+        }
+
+        // Eğer kullanıcının teknesi yoksa eşleştirme (tekne kurma) ekranına yönlendir
+        if (!data) {
+          setDebugLog(prev => prev + " | Tekne bulunamadı, claim ekranına atılıyor. user_id: " + session.user.id)
+          setNeedsClaim(true)
+          setBoat(null)
+        } else {
+          setNeedsClaim(false)
+          setBoat(data)
 
         // 2. Yeni VIEW üzerinden cihazların en son durumlarını tek seferde ve eksiksiz çek.
-        // limit(50) kaldırıldı çünkü artık her cihazın sadece güncel 1 satırı gelecek.
-        // DİKKAT: Telemetry tablosunda boat_id hala UUID olduğu için eşleştirmeyi id üzerinden yapıyoruz.
-        // ESP32 veriyi ismiyle (boat_name) atıyor, muhtemelen backend (ingest_telemetry) bunu UUID'ye çevirip kaydediyor.
-        const { data: initialData } = await supabase
-          .from('latest_device_telemetry') // DEĞİŞİKLİK: View kullanıyoruz
+        const { data: initialData, error: viewError } = await supabase
+          .from('latest_device_telemetry')
           .select('*')
           .eq('boat_id', data.id)
 
-        if (initialData) {
+        if (viewError) {
+          console.warn("View okunamadı, cihazlar şimdilik boş gösterilecek:", viewError.message)
+        } else if (initialData) {
           const map: Record<string, TelemetryRow> = {}
           initialData.forEach(row => {
             if (row.mac_address) {
@@ -129,8 +146,11 @@ function App() {
         }
 
         // 3. Günlük Pmax ve Vmax değerlerini RPC ile çek
-        const { data: maxValues } = await supabase.rpc('get_daily_max_values', { p_boat_id: data.id })
-        if (maxValues) {
+        const { data: maxValues, error: rpcError } = await supabase.rpc('get_daily_max_values', { p_boat_id: data.id })
+        
+        if (rpcError) {
+           console.warn("RPC fonksiyonu okunamadı:", rpcError.message)
+        } else if (maxValues) {
           const tempMaxMap: Record<string, { pmax: number, vmax: number }> = {}
           maxValues.forEach((row: any) => {
             if (row.mac_address) {
@@ -152,6 +172,7 @@ function App() {
               filter: `boat_id=eq.${data.id}`
             },
             (payload) => {
+              console.log('🔥 YENİ VERİ GELDİ (Realtime):', payload)
               const newRow = payload.new as TelemetryRow
               if (newRow.mac_address) {
                 setDeviceMap(prev => ({
@@ -173,7 +194,12 @@ function App() {
               }
             }
           )
-          .subscribe()
+          .subscribe((status) => {
+            console.log('📡 Realtime Abonelik Durumu:', status)
+            if (status === 'SUBSCRIBED') {
+              console.log(`✅ Tekne (ID: ${data.id}) için canlı veri dinleniyor...`)
+            }
+          })
 
         return () => {
           supabase.removeChannel(channel)
@@ -221,22 +247,15 @@ function App() {
     }
   }, [deviceMap])
 
-  // Türkçe Karakter Temizleme (Opsiyonel / Normalizasyon)
-  const normalizeString = (str: string) => {
-    return str.trim()
-      .replace(/ı/g, 'i')
-      .replace(/ğ/g, 'g')
-      .replace(/ü/g, 'u')
-      .replace(/ş/g, 's')
-      .replace(/ö/g, 'o')
-      .replace(/ç/g, 'c')
-      .replace(/İ/g, 'I')
-      .replace(/Ğ/g, 'G')
-      .replace(/Ü/g, 'U')
-      .replace(/Ş/g, 'S')
-      .replace(/Ö/g, 'O')
-      .replace(/Ç/g, 'C')
-      .toUpperCase() // ESP32 ile eşleştirmede hata riskini minimuma indirmek için tamamen büyültebiliriz
+  // Rastgele PIN Üretici (Örn: A7X9-B2)
+  const generatePin = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Karışabilecek O,0,I,1 çıkarıldı
+    let pin = ''
+    for (let i = 0; i < 6; i++) {
+      if (i === 4) pin += '-'
+      pin += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return pin
   }
 
   // Yeni Tekne (Sistem) Kurulum İşlemi
@@ -249,25 +268,32 @@ function App() {
       return
     }
 
-    // İsmi standartlaştıralım 
-    // (Böylece kullanıcı telefondan 'Yakamoz' yazsa bile sistem kolayca eşleşir)
-    const normalizedName = normalizeString(boatNameInput)
+    const devicePin = generatePin()
 
     // Sadece adı ve user_id'si ile oluştur
     const { error: insertError } = await supabase
       .from('boats')
       .insert({
-        name: normalizedName,
+        name: boatNameInput.trim(),
         user_id: session.user.id,
-        device_secret: normalizedName // Artık secret ve id aynı şey oldu.
+        device_secret: devicePin // Artık rastgele güvenli PIN kullanılıyor
       })
 
     if (insertError) {
-      setClaimError("Tekne adı kaydedilirken bir hata oluştu: " + insertError.message)
+      setClaimError("Tekne kaydedilirken bir hata oluştu: " + insertError.message)
       return
     }
 
-    // 3. Başarılı kayıt: Sayfayı yenile veya fetchBoat mantığını tekrar çağır
+    // Kayıt sonrası kullanıcıya şifreyi göstermek için alert yerine şık bir bekleme yapabiliriz
+    // Ama en kolayı uyarıyı gösterip fetchBoat'ı tekrar çağırmak
+    alert(`TEKNENİZ BAŞARIYLA OLUŞTURULDU!\n\nLütfen cihazı kurarken (WiFi ekranında) şu PIN kodunu girin:\n\n>>> ${devicePin} <<<\n\nBu kodu daha sonra Admin panelinden görebilirsiniz.`)
+    
+    // Sayfayı yenilemek yerine state'i güncelleyelim
+    setNeedsClaim(false)
+    setBoatNameInput("")
+    
+    // Yeni eklenen tekneyi çekmesi için fetchBoat'ı simüle edebiliriz ama
+    // reload yapmak RLS cache'lerini temizlemek için daha güvenli.
     window.location.reload()
   }
 
@@ -285,25 +311,26 @@ function App() {
         <div className="max-w-md w-full bg-gray-900 rounded-xl p-8 shadow-2xl border border-gray-800">
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-              Sisteme Hoş Geldiniz
+              Yeni Tekne Ekle
             </h1>
             <p className="text-gray-400 mt-2 text-sm">
-              Takibini yapmak istediğiniz teknenin adını aşağıya girin. (Örn: YAKAMOZ) <br /><br />
-              <strong className="text-yellow-400">ÖNEMLI:</strong> Bu adı, ESP32 cihazınızı Wi-Fi uzerinden ayarlarken <strong>Boat ID</strong> alanına birebir aynı yazmalısınız.
+              Takibini yapmak istediğiniz teknenin adını aşağıya girin. <br /><br />
+              Kaydet butonuna bastığınızda size özel bir <strong>Cihaz Şifresi (PIN)</strong> üretilecektir.
             </p>
           </div>
 
           <form onSubmit={handleRegisterBoat} className="space-y-6">
+            {debugLog && <div className="text-xs text-yellow-500 bg-black p-2 rounded">{debugLog}</div>}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Tekne Adı (Boat Name)
+                Tekne Adı
               </label>
               <input
                 type="text"
                 value={boatNameInput}
                 onChange={(e) => setBoatNameInput(e.target.value)}
                 placeholder="Örn: YAKAMOZ"
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-500 uppercase"
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-500"
               />
             </div>
             {claimError && <div className="text-red-400 text-sm text-center">{claimError}</div>}
@@ -311,7 +338,7 @@ function App() {
               type="submit"
               className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold rounded-lg shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
             >
-              Kaydet ve Başla
+              Tekneyi Oluştur ve PIN Al
             </button>
           </form>
         </div>
@@ -347,6 +374,22 @@ function App() {
               </span>
               Canlı
             </div>
+            <button
+              onClick={() => navigate('/update')}
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-400 hover:bg-blue-600/40 transition-colors text-sm"
+              title="Cihaz Yazılımı Güncelle"
+            >
+              <DownloadCloud size={16} /> Cihaz Güncelle
+            </button>
+            {isAdmin && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-400 hover:bg-purple-600/40 transition-colors text-sm"
+                title="Admin Paneli"
+              >
+                <Settings size={16} /> Admin
+              </button>
+            )}
             <button
               onClick={() => supabase.auth.signOut()}
               className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"

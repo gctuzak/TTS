@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 
 interface SystemFlowProps {
   pvPower: number; // Watt
@@ -22,7 +22,7 @@ export const SystemFlow: React.FC<SystemFlowProps> = ({
   };
 
   const pvSpeed = getSpeed(pvPower);
-  const batSpeed = getSpeed(batteryPower);
+  // const batSpeed = getSpeed(batteryPower);
   const loadSpeed = getSpeed(loadPower);
 
   // Akü doluluk rengi

@@ -75,16 +75,22 @@ const char index_html[] PROGMEM = R"rawliteral(
         <h2 style="margin-top:0; font-size:1.2rem;">Kurulum Ayarları</h2>
         <form id="settingsForm" action="/save" method="POST" onsubmit="return submitForm(event)">
           <div class="form-group">
-            <label for="ssid">WiFi Adı (SSID)</label>
-            <input type="text" id="ssid" name="ssid" placeholder="Tekne WiFi Adı" required>
+            <label for="ssid">WiFi Adı (SSID) <button type="button" onclick="scanWifi()" style="float:right; background:none; border:none; color:var(--primary); cursor:pointer; font-size:0.8rem;">Ağları Tara 🔄</button></label>
+            <div style="display:flex; gap:0.5rem;">
+                <select id="ssid_select" onchange="document.getElementById('ssid').value = this.value" style="width:50%; padding:0.75rem; border:1px solid #d1d5db; border-radius:6px; background:white;">
+                    <option value="">Ağ seçin...</option>
+                </select>
+                <input type="text" id="ssid" name="ssid" placeholder="veya buraya yazın" required style="width:50%;">
+            </div>
           </div>
           <div class="form-group">
             <label for="pass">WiFi Şifresi</label>
             <input type="password" id="pass" name="pass" placeholder="WiFi Şifresi">
           </div>
           <div class="form-group">
-            <label for="boatId">Tekne Adı</label>
-            <input type="text" id="boatId" name="boatId" placeholder="Örn: Mavi Marmara" required>
+            <label for="boatId">Cihaz Şifresi (Device PIN)</label>
+            <input type="text" id="boatId" name="boatId" placeholder="Örn: 6A9B-K2" required>
+            <small style="color:#6b7280; display:block; margin-top:0.25rem;">Web panelinden aldığınız kısa PIN kodunu girin.</small>
           </div>
           
           <hr style="border:0; border-top:1px solid #e5e7eb; margin: 1.5rem 0;">
@@ -131,6 +137,32 @@ const char index_html[] PROGMEM = R"rawliteral(
       }
     }
     
+    function scanWifi() {
+        const select = document.getElementById('ssid_select');
+        select.innerHTML = '<option value="">Taranıyor...</option>';
+        fetch('/api/wifi-scan')
+        .then(res => res.json())
+        .then(data => {
+            if(data.length === 0) {
+                select.innerHTML = '<option value="">Ağ bulunamadı</option>';
+                return;
+            }
+            
+            // Benzersiz ağları filtrele (Set kullanarak)
+            const uniqueNetworks = [...new Set(data)];
+            
+            let html = '<option value="">Ağ seçin...</option>';
+            uniqueNetworks.forEach(net => {
+                html += `<option value="${net}">${net}</option>`;
+            });
+            select.innerHTML = html;
+        })
+        .catch(err => {
+            console.error('WiFi tarama hatası:', err);
+            select.innerHTML = '<option value="">Tarama başarısız</option>';
+        });
+    }
+
     function loadSettings() {
         fetch('/api/config')
         .then(res => res.json())
@@ -139,6 +171,7 @@ const char index_html[] PROGMEM = R"rawliteral(
             document.getElementById('boatId').value = data.boatId || '';
             devices = data.devices || [];
             renderDeviceList();
+            scanWifi(); // Sayfa açılınca otomatik tara
         })
         .catch(err => console.error('Ayar okuma hatasi:', err));
     }
