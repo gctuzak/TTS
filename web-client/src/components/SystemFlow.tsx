@@ -112,9 +112,6 @@ export const SystemFlow: React.FC<DashboardProps> = ({
       <div className="flex justify-between items-center mb-6 sm:mb-8 pb-4 border-b border-slate-800"> 
         <div className="flex items-center space-x-3"> 
           <h1 className="text-xl sm:text-2xl font-bold tracking-wider text-slate-100">CERBO GX</h1> 
-          <span className="hidden sm:inline-block text-xs font-medium bg-slate-800 text-slate-400 px-2 py-1 rounded-md"> 
-            VENUS OS 
-          </span> 
         </div> 
         <div className="flex items-center space-x-2 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700"> 
           <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-green-500 animate-pulse"></div> 

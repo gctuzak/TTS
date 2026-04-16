@@ -160,6 +160,30 @@ function App() {
           setMaxDataMap(tempMaxMap)
         }
 
+        // 4. Grafikler İçin Geçmiş 24 Saatlik Veriyi Çek (Her saat başı 1 veri veya son 30 veri)
+        const { data: historyRes } = await supabase
+          .from('telemetry')
+          .select('created_at, voltage, pv_power, device_type')
+          .eq('boat_id', data.id)
+          .order('created_at', { ascending: false })
+          .limit(100) // Son 100 kaydı alıp birleştirelim
+        
+        if (historyRes && historyRes.length > 0) {
+          // Gelen dağınık verileri zamana göre gruplayıp grafiğe uygun hale getiriyoruz
+          // Basit bir yaklaşım olarak son 24 veriyi ters çevirip ekleyelim (zaman sırasına sokalım)
+          const formattedHistory = historyRes
+            .filter(r => r.device_type === 2) // Ana grafiği Battery Monitor'e (Akü Voltajı) göre dizelim
+            .slice(0, 24)
+            .reverse()
+            .map(r => ({
+              time: new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              voltage: Number(r.voltage) || 0,
+              solar: Number(r.pv_power) || 0
+            }))
+          
+          setHistoryData(formattedHistory)
+        }
+
         // Realtime Abonelik
         const channel = supabase
           .channel('telemetry_updates')
@@ -180,13 +204,13 @@ function App() {
                   [`${newRow.mac_address}`]: newRow
                 }))
 
-                // Grafik verisi güncelleme
-                if (newRow.voltage) {
+                // Grafik verisi güncelleme (Sadece geçerli veri geldiğinde)
+                if (newRow.device_type === 2 && newRow.voltage) {
                   setHistoryData(prev => {
                     const newData = [...prev, {
                       time: new Date(newRow.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                      voltage: newRow.voltage,
-                      solar: newRow.pv_power || 0
+                      voltage: Number(newRow.voltage),
+                      solar: Number(newRow.pv_power) || 0
                     }].slice(-24)
                     return newData
                   })
