@@ -21,11 +21,19 @@ TFT_eSPI tft = TFT_eSPI();
 
 // --- Değişkenler ---
 unsigned long lastTelemeterySend = 0;
-const long TELEMETRY_INTERVAL = 10000; 
+bool firstPingSent = false; // Cihaz açılır açılmaz anında veri atması için bayrak
+const long TELEMETRY_INTERVAL = 60000; // 1 Dakika (Değişiklik yoksa Heartbeat)
+const long TELEMETRY_MIN_INTERVAL = 5000; // Minimum 5 saniyede bir at (Flood koruması)
 unsigned long lastDisplayUpdate = 0;
 unsigned long apTimeout = 0;
 bool isApMode = false;
 String lastWifiError = ""; // WiFi Hata Durumu
+
+// --- Son Gönderilen Verilerin Hafızası (Değişiklik Tespiti İçin) ---
+std::map<String, float> lastSentVoltage;
+std::map<String, float> lastSentSoc;
+std::map<String, int> lastSentAlarm;
+std::map<String, float> lastSentPower;
 
 void setupDisplay() {
     // Backlight pinini manuel olarak açalım (LilyGo T-Display için GPIO 4)
@@ -517,10 +525,8 @@ void setup() {
 void sendTelemetry() {
     if (WiFi.status() != WL_CONNECTED) return;
     
-    // DEBUG: DNS Kontrol
-    Serial.print("Aktif DNS: ");
-    Serial.println(WiFi.dnsIP());
-
+    unsigned long now = millis();
+    
     if (config_supabaseUrl == "" || config_secret == "") {
         Serial.println("HATA: Supabase URL veya Secret eksik!");
         return;
@@ -532,6 +538,43 @@ void sendTelemetry() {
         return;
     }
 
+    bool shouldSend = false;
+    bool isHeartbeat = (now - lastTelemeterySend > TELEMETRY_INTERVAL);
+    
+    // Eğer cihaz yeni açıldıysa, her şeyi boşverip anında ilk veriyi yolla
+    if (!firstPingSent) {
+        shouldSend = true;
+        firstPingSent = true;
+        Serial.println("ILK BAGLANTI (Initial Ping): Veri aninda gonderiliyor.");
+    } 
+    // Eğer 1 dakika (Heartbeat) dolmadıysa, kritik bir değişiklik var mı diye kontrol et
+    else if (!isHeartbeat) {
+        // En az 5 saniye bekle (Flood koruması)
+        if (now - lastTelemeterySend < TELEMETRY_MIN_INTERVAL) return;
+        
+        for (auto const& [mac, data] : devices) {
+            if (now - data.timestamp > 60000) continue; // Eski veriyi atla
+            
+            float power = (data.power == 0 && data.voltage > 0) ? (data.voltage * data.current) : data.power;
+            
+            // Kritik Değişim Şartları (Delta)
+            if (abs(data.voltage - lastSentVoltage[mac]) >= 0.2 ||     // 0.2V Voltaj değişimi
+                abs(data.soc - lastSentSoc[mac]) >= 1.0 ||             // %1 Şarj (SoC) değişimi
+                data.alarm != lastSentAlarm[mac] ||                    // Alarm durumu değişimi
+                abs(power - lastSentPower[mac]) >= 50.0                // 50W Güç değişimi
+            ) {
+                shouldSend = true;
+                Serial.printf("Kritik Degisim Algilandi: %s\n", mac.c_str());
+                break; // Bir cihazda bile değişim varsa tüm veriyi gönder
+            }
+        }
+    } else {
+        shouldSend = true;
+        Serial.println("Heartbeat: 5 dakika doldu, periyodik veri gonderiliyor.");
+    }
+
+    if (!shouldSend) return; // Göndermeye gerek yok
+
     // JSON Oluştur (RPC Formatı: { \"payload\": [ ... ] })
     DynamicJsonDocument doc(4096);
     JsonArray measurements = doc.createNestedArray("payload");
@@ -540,23 +583,24 @@ void sendTelemetry() {
 
     for (auto const& [mac, data] : devices) {
         // Sadece son 1 dakika içinde güncellenen verileri gönder
-        if (millis() - data.timestamp > 60000) {
-            Serial.printf("Atlanan eski veri: %s\n", mac.c_str());
-            continue;
-        }
+        if (now - data.timestamp > 60000) continue;
         
         hasNewData = true;
         JsonObject m = measurements.createNestedObject();
         
         m["mac_address"] = mac; // Cihaz MAC adresi
-        m["boat_name"] = config_boatId; // Kullanıcının girdiği tekne adı
+        m["boat_name"] = config_boatId; // Kullanıcının girdiği tekne adı (Device PIN)
+        
+        // Power hesapla (Eğer yoksa)
+        float power = (data.power == 0 && data.voltage > 0) ? (data.voltage * data.current) : data.power;
         
         // Supabase DB Column Names
         m["voltage"] = data.voltage;
         m["current"] = data.current;
-        m["temperature"] = data.temperature; // Sıcaklık eklendi
-        m["alarm"] = data.alarm;       // Alarm durumu eklendi
-        m["device_type"] = (int)data.type;  // Device Type (1=Solar, 2=BMV)
+        m["power"] = power;
+        m["temperature"] = data.temperature;
+        m["alarm"] = data.alarm;
+        m["device_type"] = (int)data.type;
         m["soc"] = data.soc;
         m["pv_power"] = data.pvPower;
         m["pv_voltage"] = data.pvVoltage;
@@ -569,24 +613,18 @@ void sendTelemetry() {
         m["remaining_mins"] = data.remainingMins;
         m["aux_voltage"] = data.auxVoltage;
         m["charge_state"] = data.chargeStateDesc;
-        
         m["load_state"] = data.loadState;
         
-        // Power hesapla (Eğer yoksa)
-        if (data.power == 0 && data.voltage > 0) {
-             m["power"] = data.voltage * data.current;
-        } else {
-             m["power"] = data.power;
-        }
-        
-        // Cihaz türünü ayırt etmek için opsiyonel
-        // m["type"] = (int)data.type; 
+        // Son gönderilenleri hafızaya kaydet
+        lastSentVoltage[mac] = data.voltage;
+        lastSentSoc[mac] = data.soc;
+        lastSentAlarm[mac] = data.alarm;
+        lastSentPower[mac] = power;
     }
 
-    if (!hasNewData) {
-        Serial.println("Guncel veri bulunamadi, gonderim iptal.");
-        return;
-    }
+    if (!hasNewData) return;
+
+    lastTelemeterySend = now; // Gönderim zamanını güncelle
 
     String payload;
     serializeJson(doc, payload);
