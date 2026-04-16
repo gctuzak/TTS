@@ -40,11 +40,30 @@ export default function AdminDashboard() {
   }
 
   const fetchData = async () => {
+    // Tüm profilleri çek (Bunu zaten çekebiliyor olmanız lazım, eğer RLS engellemiyorsa)
     const { data: profilesData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
-    const { data: boatsData } = await supabase.from('boats').select('*, profiles(email, full_name)').order('created_at', { ascending: false })
+    
+    // Tekneleri güvenli RPC üzerinden çek (RLS'yi by-pass eden admin fonksiyonu)
+    const { data: boatsData, error: rpcError } = await supabase.rpc('get_all_boats_for_admin')
+    
+    if (rpcError) {
+      console.error("Admin yetkisiyle tekneler çekilemedi. SQL fonksiyonu eklenmemiş olabilir.", rpcError)
+      // Fallback (Eğer RPC yoksa düz tablodan çekmeyi dene)
+      const { data: fallbackBoats } = await supabase.from('boats').select('*, profiles(email, full_name)').order('created_at', { ascending: false })
+      if (fallbackBoats) setBoats(fallbackBoats)
+    } else if (boatsData) {
+      // RPC'den gelen veriyi React state'ine uygun formata dönüştür
+      const formattedBoats = boatsData.map((b: any) => ({
+        ...b,
+        profiles: {
+          full_name: b.owner_name,
+          email: b.owner_email
+        }
+      }))
+      setBoats(formattedBoats)
+    }
     
     if (profilesData) setUsers(profilesData)
-    if (boatsData) setBoats(boatsData)
     
     setLoading(false)
   }
