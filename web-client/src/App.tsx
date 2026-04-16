@@ -401,49 +401,19 @@ function App() {
         </header>
 
         <main className="max-w-7xl mx-auto space-y-8">
-          {/* Üst Kısım: Akış Şeması */}
+          {/* Üst Kısım: Akış Şeması ve İstatistik Kartları (Cerbo GX Görünümü) */}
           <section>
             <SystemFlow
               pvPower={dashboardData.pvPower}
               batteryPower={dashboardData.batteryPower}
               loadPower={dashboardData.loadPower}
-              batterySoc={dashboardData.soc}
+              voltage={dashboardData.voltage}
+              soc={dashboardData.soc}
+              remaining={dashboardData.remaining}
             />
           </section>
 
-          {/* Orta Kısım: İstatistik Kartları */}
-          <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard
-              title="Akü Voltajı"
-              value={dashboardData.voltage.toFixed(1)}
-              unit="V"
-              color="blue"
-              icon={<Battery className="text-blue-400" size={20} />}
-            />
-            <StatCard
-              title="Solar Güç"
-              value={dashboardData.pvPower.toFixed(0)}
-              unit="W"
-              color="yellow"
-              icon={<Sun className="text-yellow-400" size={20} />}
-            />
-            <StatCard
-              title="Yük Tüketimi"
-              value={dashboardData.loadPower.toFixed(0)}
-              unit="W"
-              color="red"
-              icon={<Zap className="text-red-400" size={20} />}
-            />
-            <StatCard
-              title="Kalan Süre"
-              value={dashboardData.remaining <= 0 ? '--' : `${Math.floor(dashboardData.remaining / 60)}s ${dashboardData.remaining % 60}d`}
-              unit=""
-              color="green"
-              icon={<Clock className="text-green-400" size={20} />}
-            />
-          </section>
-
-          {/* Alt Kısım: Grafikler */}
+          {/* Orta Kısım: Grafikler */}
           <section>
             <HistoryCharts data={historyData} />
           </section>

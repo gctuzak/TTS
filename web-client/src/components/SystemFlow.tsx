@@ -1,150 +1,212 @@
-import React from 'react';
+import React from 'react'; 
+import { Sun, Zap, Activity, Clock } from 'lucide-react'; 
 
-interface SystemFlowProps {
-  pvPower: number; // Watt
-  batteryPower: number; // Watt (+ charging, - discharging)
-  loadPower: number; // Watt
-  batterySoc: number; // %
-}
+export interface DashboardProps { 
+  pvPower: number;      // Örn: 240 (Watt) 
+  batteryPower: number; // Örn: -120 (Watt. Negatif: Deşarj, Pozitif: Şarj) 
+  loadPower: number;    // Örn: 360 (Watt) 
+  voltage: number;      // Örn: 13.2 (Volt) 
+  soc: number;          // Örn: 85.5 (%) 
+  remaining: number;    // Örn: 1250 (Dakika) 
+} 
 
-export const SystemFlow: React.FC<SystemFlowProps> = ({
-  pvPower,
-  batteryPower,
-  loadPower,
-  batterySoc
-}) => {
-  // Animasyon hızını güce göre hesapla (0 = duruyor, düşük değer = hızlı)
-  const getSpeed = (power: number) => {
-    if (Math.abs(power) < 5) return 0;
-    // 1000W = 1s, 100W = 5s gibi basit bir mantık
-    const speed = Math.max(0.5, 5 - (Math.abs(power) / 200)); 
-    return speed;
-  };
+// Enerji akışını çizen ve canlandıran alt bileşen 
+const FlowLine = ({ x1, y1, x2, y2, power, color }: any) => { 
+  const isFlowing = power !== 0; 
+  // Güç pozitifse düz (normal), negatifse ters (reverse) yönde akar 
+  const direction = power > 0 ? 1 : -1; 
+  // Animasyon hızı güce bağlıdır (Güç arttıkça süre kısalır, noktalar hızlanır) 
+  const duration = isFlowing ? Math.max(0.3, 150 / (Math.abs(power) + 20)) : 0; 
 
-  const pvSpeed = getSpeed(pvPower);
-  // const batSpeed = getSpeed(batteryPower);
-  const loadSpeed = getSpeed(loadPower);
+  return ( 
+    <g> 
+      {/* Arka plan sabit çizgi */} 
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#334155" strokeWidth="4" strokeLinecap="round" /> 
+      
+      {/* Akan noktalar */} 
+      {isFlowing ? ( 
+        <line 
+          x1={x1} 
+          y1={y1} 
+          x2={x2} 
+          y2={y2} 
+          stroke={color} 
+          strokeWidth="4" 
+          strokeLinecap="round" 
+          strokeDasharray="8 8" 
+          style={{ 
+            animation: `dash-flow ${duration}s linear infinite ${direction === -1 ? 'reverse' : 'normal'}` 
+          }} 
+        /> 
+      ) : ( 
+        // Güç 0 ise noktalar hareketsiz durur ve rengi kararır 
+        <line 
+          x1={x1} 
+          y1={y1} 
+          x2={x2} 
+          y2={y2} 
+          stroke="#475569" 
+          strokeWidth="4" 
+          strokeLinecap="round" 
+          strokeDasharray="8 8" 
+        /> 
+      )} 
+    </g> 
+  ); 
+}; 
 
-  // Akü doluluk rengi
-  const getBatColor = (soc: number) => {
-    if (soc > 50) return '#4ade80'; // Green
-    if (soc > 20) return '#facc15'; // Yellow
-    return '#ef4444'; // Red
-  };
+// Alt kısımdaki istatistik kartları için alt bileşen 
+const StatCard = ({ title, value, icon, valueColor = "text-white" }: any) => ( 
+  <div className="flex items-center p-3 sm:p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-sm hover:bg-slate-700/50 transition-colors"> 
+    <div className="flex shrink-0 items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-900/80 mr-3 sm:mr-4 border border-slate-700"> 
+      {icon} 
+    </div> 
+    <div className="overflow-hidden"> 
+      <p className="text-[10px] sm:text-xs text-slate-400 font-medium mb-0.5 truncate">{title}</p> 
+      <p className={`text-base sm:text-lg font-bold truncate ${valueColor}`}>{value}</p> 
+    </div> 
+  </div> 
+); 
 
-  return (
-    <div className="w-full max-w-3xl mx-auto p-4 bg-gray-900 rounded-xl shadow-2xl">
-      <svg viewBox="0 0 800 600" className="w-full h-auto">
-        <defs>
-          {/* Hareketli Nokta (Elektron) */}
-          <circle id="electron" r="6" fill="white" className="filter drop-shadow-[0_0_4px_rgba(255,255,255,0.8)]" />
-          
-          {/* Akış Yolu Maskesi (Opsiyonel) */}
-        </defs>
+// Dakika cinsinden süreyi okunabilir formata çeviren yardımcı fonksiyon 
+const formatTime = (minutes: number) => { 
+  if (minutes <= 0 || !isFinite(minutes)) return "--"; 
+  if (minutes > 9999) return "Sınırsız"; 
+  
+  const d = Math.floor(minutes / (24 * 60)); 
+  const h = Math.floor((minutes % (24 * 60)) / 60); 
+  const m = Math.floor(minutes % 60); 
 
-        {/* --- YOLLAR (Statik Çizgiler) --- */}
+  if (d > 0) return `${d}g ${h}sa`; 
+  if (h > 0) return `${h}sa ${m}dk`; 
+  return `${m} dk`; 
+}; 
+
+export const SystemFlow: React.FC<DashboardProps> = ({ 
+  pvPower = 0, 
+  batteryPower = 0, 
+  loadPower = 0, 
+  voltage = 0, 
+  soc = 0, 
+  remaining = 0, 
+}) => { 
+  // Undefined/null değerler için güvenli fallback
+  const safePvPower = Number(pvPower) || 0;
+  const safeBatteryPower = Number(batteryPower) || 0;
+  const safeLoadPower = Number(loadPower) || 0;
+  const safeVoltage = Number(voltage) || 0;
+  const safeSoc = Number(soc) || 0;
+  const safeRemaining = Number(remaining) || 0;
+
+  return ( 
+    <div className="w-full max-w-4xl mx-auto p-4 sm:p-6 bg-slate-900 rounded-2xl text-white shadow-2xl border border-slate-800 font-sans"> 
+      {/* Animasyon Keyframes Tanımı */} 
+      <style>{` 
+        @keyframes dash-flow { 
+          from { stroke-dashoffset: 16; } 
+          to { stroke-dashoffset: 0; } 
+        } 
+      `}</style> 
+
+      {/* --- ÜST KISIM: Başlık ve Durum --- */} 
+      <div className="flex justify-between items-center mb-6 sm:mb-8 pb-4 border-b border-slate-800"> 
+        <div className="flex items-center space-x-3"> 
+          <h1 className="text-xl sm:text-2xl font-bold tracking-wider text-slate-100">CERBO GX</h1> 
+          <span className="hidden sm:inline-block text-xs font-medium bg-slate-800 text-slate-400 px-2 py-1 rounded-md"> 
+            VENUS OS 
+          </span> 
+        </div> 
+        <div className="flex items-center space-x-2 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700"> 
+          <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-green-500 animate-pulse"></div> 
+          <span className="text-xs sm:text-sm font-medium text-green-400">Canlı</span> 
+        </div> 
+      </div> 
+
+      {/* --- ORTA KISIM: Enerji Akış Şeması --- */} 
+      <div className="relative h-64 sm:h-80 w-full mb-8 rounded-xl bg-slate-900/50 border border-slate-800/50 overflow-hidden"> 
         
-        {/* PV -> Battery (Sol Üst -> Orta) */}
-        <path d="M 150 150 L 150 300 L 350 300" stroke="#374151" strokeWidth="4" fill="none" />
-        
-        {/* Battery -> Load (Orta -> Sağ Alt) */}
-        <path d="M 450 300 L 650 300 L 650 450" stroke="#374151" strokeWidth="4" fill="none" />
+        {/* SVG Bağlantı Çizgileri */} 
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-0"> 
+          {/* Güneş Panelinden -> Ana Hatta (Soldan Sağa) */} 
+          <FlowLine x1="25%" y1="30%" x2="50%" y2="30%" power={safePvPower} color="#eab308" /> 
+          {/* Ana Hattan -> DC Yüke (Soldan Sağa) */} 
+          <FlowLine x1="50%" y1="30%" x2="75%" y2="30%" power={safeLoadPower} color="#ef4444" /> 
+          {/* Ana Hattan -> Aküye (Yukarıdan Aşağıya) */} 
+          <FlowLine x1="50%" y1="30%" x2="50%" y2="80%" power={safeBatteryPower} color="#3b82f6" /> 
+        </svg> 
 
-        {/* Grid -> Battery (Sağ Üst -> Orta) - Opsiyonel - KALDIRILDI */}
-        {/* <path d="M 650 150 L 650 300 L 450 300" stroke="#374151" strokeWidth="4" fill="none" /> */}
+        {/* Merkez Birleşim Noktası */} 
+        <div className="absolute top-[30%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-slate-700 rounded-full border-2 border-slate-500 z-0"></div> 
 
-        {/* --- CİHAZ KUTULARI --- */}
+        {/* DÜĞÜM 1: GÜNEŞ PANELİ */} 
+        <div className="absolute top-[30%] left-[25%] -translate-x-1/2 -translate-y-1/2 z-10"> 
+          <div className="flex flex-col items-center justify-center bg-slate-800 border-2 border-slate-700 rounded-xl w-24 h-24 sm:w-32 sm:h-32 shadow-lg hover:border-yellow-500/50 transition-colors"> 
+            <Sun className="text-yellow-500 w-8 h-8 sm:w-10 sm:h-10 mb-1 sm:mb-2" /> 
+            <span className="text-[9px] sm:text-xs text-slate-400 font-semibold mb-0.5 sm:mb-1 text-center">GÜNEŞ PANELİ</span> 
+            <span className="text-sm sm:text-xl font-bold text-yellow-500">{safePvPower.toFixed(0)} W</span> 
+          </div> 
+        </div> 
 
-        {/* 1. PV (Güneş Paneli) - Sol Üst */}
-        <g transform="translate(100, 50)">
-          <rect x="0" y="0" width="100" height="100" rx="10" fill="#f59e0b" fillOpacity="0.2" stroke="#f59e0b" strokeWidth="2" />
-          <text x="50" y="40" textAnchor="middle" fill="#f59e0b" fontWeight="bold">SOLAR</text>
-          <text x="50" y="70" textAnchor="middle" fill="white" fontSize="18">{pvPower.toFixed(0)} W</text>
-          {/* Güneş İkonu (Basit) */}
-          <circle cx="50" cy="0" r="15" fill="#f59e0b" />
-        </g>
+        {/* DÜĞÜM 2: DC YÜK */} 
+        <div className="absolute top-[30%] left-[75%] -translate-x-1/2 -translate-y-1/2 z-10"> 
+          <div className="flex flex-col items-center justify-center bg-slate-800 border-2 border-slate-700 rounded-xl w-24 h-24 sm:w-32 sm:h-32 shadow-lg hover:border-red-500/50 transition-colors"> 
+            <Zap className="text-red-500 w-8 h-8 sm:w-10 sm:h-10 mb-1 sm:mb-2" /> 
+            <span className="text-[9px] sm:text-xs text-slate-400 font-semibold mb-0.5 sm:mb-1 text-center">DC YÜK</span> 
+            <span className="text-sm sm:text-xl font-bold text-red-500">{safeLoadPower.toFixed(0)} W</span> 
+          </div> 
+        </div> 
 
-        {/* 2. Battery (Akü) - Orta */}
-        <g transform="translate(350, 250)">
-          <rect x="0" y="0" width="100" height="100" rx="10" fill={getBatColor(batterySoc)} fillOpacity="0.2" stroke={getBatColor(batterySoc)} strokeWidth="2" />
-          <text x="50" y="30" textAnchor="middle" fill={getBatColor(batterySoc)} fontWeight="bold">BATTERY</text>
-          <text x="50" y="60" textAnchor="middle" fill="white" fontSize="24">{batterySoc.toFixed(0)}%</text>
-          <text x="50" y="85" textAnchor="middle" fill="gray" fontSize="14">{Math.abs(batteryPower).toFixed(0)} W</text>
-          
-          {/* Akü İkonu/Doluluk Barı */}
-          <rect x="10" y="40" width="80" height="40" rx="4" stroke="white" strokeWidth="1" fill="none" />
-          <rect x="12" y="42" width={76 * (batterySoc / 100)} height="36" rx="2" fill={getBatColor(batterySoc)} />
-        </g>
+        {/* DÜĞÜM 3: AKÜ */} 
+        <div className="absolute top-[80%] left-[50%] -translate-x-1/2 -translate-y-1/2 z-10"> 
+          <div className="flex flex-col items-center justify-center bg-slate-800 border-2 border-slate-700 rounded-xl w-28 h-28 sm:w-36 sm:h-36 shadow-lg hover:border-blue-500/50 transition-colors"> 
+            {/* Dinamik Pil İkonu */} 
+            <div className="relative w-12 h-6 sm:w-16 sm:h-8 border-2 border-slate-500 rounded-sm sm:rounded-md mb-1 sm:mb-2 flex items-center p-[2px]"> 
+              <div className="absolute -right-1.5 sm:-right-2 top-1/2 -translate-y-1/2 w-1 sm:w-1.5 h-3 sm:h-4 bg-slate-500 rounded-r-sm"></div> 
+              <div 
+                className={`h-full rounded-sm transition-all duration-500 ${safeSoc > 50 ? 'bg-green-500' : safeSoc > 20 ? 'bg-yellow-500' : 'bg-red-500'}`} 
+                style={{ width: `${Math.min(100, Math.max(0, safeSoc))}%` }} 
+              ></div> 
+              <span className="absolute inset-0 flex items-center justify-center text-[9px] sm:text-[11px] font-bold text-white drop-shadow-md"> 
+                %{safeSoc.toFixed(1)} 
+              </span> 
+            </div> 
+            
+            <span className="text-[10px] sm:text-xs text-slate-400 font-semibold mb-0.5 sm:mb-1">AKÜ</span> 
+            <span className="text-sm sm:text-xl font-bold text-blue-400">{Math.abs(safeBatteryPower).toFixed(0)} W</span> 
+            <span className="text-[8px] sm:text-[10px] text-slate-500 uppercase tracking-wider mt-0.5 sm:mt-1 text-center font-medium"> 
+              {safeBatteryPower > 0 ? 'Şarj Oluyor' : safeBatteryPower < 0 ? 'Deşarj Oluyor' : 'Beklemede'} 
+            </span> 
+          </div> 
+        </div> 
+      </div> 
 
-        {/* 3. Load (Yükler) - Sağ Alt */}
-        <g transform="translate(600, 450)">
-          <rect x="0" y="0" width="100" height="100" rx="10" fill="#3b82f6" fillOpacity="0.2" stroke="#3b82f6" strokeWidth="2" />
-          <text x="50" y="40" textAnchor="middle" fill="#3b82f6" fontWeight="bold">LOADS</text>
-          <text x="50" y="70" textAnchor="middle" fill="white" fontSize="18">{loadPower.toFixed(0)} W</text>
-        </g>
-
-        {/* 4. Grid (Şebeke) - Sağ Üst (Opsiyonel) - KALDIRILDI */}
-        {/*
-        <g transform="translate(600, 50)">
-          <rect x="0" y="0" width="100" height="100" rx="10" fill="#ef4444" fillOpacity="0.2" stroke="#ef4444" strokeWidth="2" />
-          <text x="50" y="40" textAnchor="middle" fill="#ef4444" fontWeight="bold">GRID</text>
-          <text x="50" y="70" textAnchor="middle" fill="white" fontSize="18">{Math.abs(gridPower).toFixed(0)} W</text>
-        </g>
-        */}
-
-
-        {/* --- ANİMASYONLAR --- */}
-
-        {/* PV -> Battery Akışı */}
-        {pvSpeed > 0 && (
-          <g>
-            <path id="pv-path" d="M 150 150 L 150 300 L 350 300" fill="none" />
-            <circle r="5" fill="#f59e0b">
-              <animateMotion repeatCount="indefinite" dur={`${pvSpeed}s`} keyPoints="0;1" keyTimes="0;1">
-                <mpath href="#pv-path" />
-              </animateMotion>
-            </circle>
-            {/* Yoğunluk için ikinci parçacık */}
-            <circle r="5" fill="#f59e0b">
-              <animateMotion repeatCount="indefinite" dur={`${pvSpeed}s`} begin={`${pvSpeed/2}s`} keyPoints="0;1" keyTimes="0;1">
-                <mpath href="#pv-path" />
-              </animateMotion>
-            </circle>
-          </g>
-        )}
-
-        {/* Battery -> Load Akışı (Deşarj) */}
-        {loadPower > 0 && (
-          <g>
-            <path id="load-path" d="M 450 300 L 650 300 L 650 450" fill="none" />
-            <circle r="5" fill="#3b82f6">
-              <animateMotion repeatCount="indefinite" dur={`${loadSpeed}s`} keyPoints="0;1" keyTimes="0;1">
-                <mpath href="#load-path" />
-              </animateMotion>
-            </circle>
-            <circle r="5" fill="#3b82f6">
-              <animateMotion repeatCount="indefinite" dur={`${loadSpeed}s`} begin={`${loadSpeed/2}s`} keyPoints="0;1" keyTimes="0;1">
-                <mpath href="#load-path" />
-              </animateMotion>
-            </circle>
-          </g>
-        )}
-
-        {/* Grid <-> Battery Akışı (Basitleştirilmiş: Sadece Grid'den Aküye) - KALDIRILDI */}
-        {/*
-        {gridPower > 0 && (
-           <g>
-           <path id="grid-import-path" d="M 650 150 L 650 300 L 450 300" fill="none" />
-           <circle r="5" fill="#ef4444">
-             <animateMotion repeatCount="indefinite" dur={`${gridSpeed}s`} keyPoints="0;1" keyTimes="0;1">
-               <mpath href="#grid-import-path" />
-             </animateMotion>
-           </circle>
-         </g>
-        )}
-        */}
-
-      </svg>
-    </div>
-  );
+      {/* --- ALT KISIM: İstatistik Kartları --- */} 
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4"> 
+        <StatCard 
+          title="Akü Voltajı" 
+          value={`${safeVoltage.toFixed(1)} V`} 
+          icon={<Activity className="text-blue-400 w-5 h-5 sm:w-6 sm:h-6" />} 
+          valueColor="text-white" 
+        /> 
+        <StatCard 
+          title="Solar Güç" 
+          value={`${safePvPower.toFixed(0)} W`} 
+          icon={<Sun className="text-yellow-500 w-5 h-5 sm:w-6 sm:h-6" />} 
+          valueColor="text-yellow-500" 
+        /> 
+        <StatCard 
+          title="Yük Tüketimi" 
+          value={`${safeLoadPower.toFixed(0)} W`} 
+          icon={<Zap className="text-red-500 w-5 h-5 sm:w-6 sm:h-6" />} 
+          valueColor="text-red-500" 
+        /> 
+        <StatCard 
+          title="Kalan Süre" 
+          value={formatTime(safeRemaining)} 
+          icon={<Clock className="text-slate-400 w-5 h-5 sm:w-6 sm:h-6" />} 
+          valueColor="text-white" 
+        /> 
+      </div> 
+    </div> 
+  ); 
 };
