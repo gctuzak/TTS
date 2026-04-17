@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LogOut, Users, Anchor, UploadCloud } from 'lucide-react'
+import { LogOut, Users, Anchor } from 'lucide-react'
 
 export default function AdminDashboard() {
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<any[]>([])
   const [boats, setBoats] = useState<any[]>([])

@@ -8,7 +8,6 @@ export default function UpdateDevice() {
   const [status, setStatus] = useState<'idle' | 'connecting' | 'flashing' | 'success' | 'error'>('idle')
   const [progress, setProgress] = useState(0)
   const [logs, setLogs] = useState<string[]>([])
-  const [session, setSession] = useState<any>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -16,7 +15,6 @@ export default function UpdateDevice() {
       if (!session) {
         navigate('/')
       }
-      setSession(session)
     })
   }, [navigate])
 
@@ -96,23 +94,23 @@ export default function UpdateDevice() {
             if (written === total) logMsg(`Dosya ${fileIndex + 1}/3 başarıyla yazıldı.`)
           }
         })
-      } catch (fetchErr: any) {
-        throw new Error('Firmware dosyaları eksik. Lütfen sistem yöneticisi ile görüşün. (' + fetchErr.message + ')')
+      } catch (err: any) {
+        throw new Error('Firmware dosyaları eksik. Lütfen sistem yöneticisi ile görüşün. (' + err.message + ')')
       }
 
       logMsg('Yazılım başarıyla atıldı! Lütfen cihazı manuel olarak resetleyin (USB kablosunu tak-çıkar yapabilirsiniz).')
         
-        try {
-          if (loader.hardReset) await loader.hardReset()
-          else if (transport.hardReset) await transport.hardReset()
-        } catch (resetErr) {
-          // Reset desteklenmiyorsa önemli değil, yazılım zaten atıldı
-        }
-        
-        await transport.disconnect()
-        setStatus('success')
+      try {
+        // @ts-ignore - esptool-js tiplerinde eksik olabilir
+        if (loader.hardReset) await loader.hardReset()
+      } catch (resetErr) {
+        // Reset desteklenmiyorsa önemli değil, yazılım zaten atıldı
+      }
+      
+      await transport.disconnect()
+      setStatus('success')
 
-      } catch (fetchErr: any) {
+    } catch (err: any) {
       logMsg('HATA: ' + err.message)
       setStatus('error')
     }

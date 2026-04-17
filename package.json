@@ -2,6 +2,7 @@
   "type": "module",
   "dependencies": {
     "@supabase/supabase-js": "^2.91.1",
+    "node-ssh": "^13.2.1",
     "pg": "^8.20.0",
     "react-qr-code": "^2.0.18",
     "ssh2": "^1.17.0"

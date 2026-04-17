@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { Auth } from './components/Auth'
 import { SystemFlow } from './components/SystemFlow'
-import { StatCard } from './components/StatCard'
 import { HistoryCharts } from './components/HistoryCharts'
 import { DeviceDetail } from './components/DeviceDetail'
-import { Battery, Zap, Sun, Clock, LogOut, Settings, DownloadCloud } from 'lucide-react'
+import { LogOut, Settings, DownloadCloud } from 'lucide-react'
 import './App.css'
 
 // Veritabanı tipleri
