@@ -580,6 +580,16 @@ function App() {
             voltage={dashboardData.voltage}
             soc={dashboardData.soc}
             remaining={dashboardData.remaining}
+            onDetailClick={(type) => {
+              const device = Object.values(deviceMap).find(d => 
+                type === 'solar' ? d.device_type === 1 : d.device_type === 2
+              );
+              if (device) {
+                // Burada istersen bir modal açabilir veya ilgili cihaza scroll yapabilirsin
+                const el = document.getElementById(`device-${device.mac_address}`);
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
           />
         </section>
 

@@ -235,7 +235,10 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
   }, [device.boat_id, device.mac_address, isSolar]);
 
   return (
-    <div className="bg-[#1e88e5] text-white rounded-xl overflow-hidden shadow-lg max-w-sm mx-auto mb-4 font-sans">
+    <div 
+      id={`device-${device.mac_address}`}
+      className="bg-[#1e88e5] text-white rounded-xl overflow-hidden shadow-lg max-w-sm mx-auto mb-4 font-sans"
+    >
       {/* Header */}
       <div className="p-4 flex justify-between items-center border-b border-white/10">
         <h3 className="font-semibold text-lg">{name || device.mac_address || 'Cihaz'}</h3>
