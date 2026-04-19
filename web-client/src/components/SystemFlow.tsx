@@ -8,6 +8,7 @@ export interface DashboardProps {
   voltage: number;      // Örn: 13.2 (Volt) 
   soc: number;          // Örn: 85.5 (%) 
   remaining: number;    // Örn: 1250 (Dakika) 
+  onDetailClick: (type: 'solar' | 'battery') => void;
 } 
 
 // Enerji akışını çizen ve canlandıran alt bileşen 
@@ -70,16 +71,17 @@ const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; 
 
 // Dakika cinsinden süreyi okunabilir formata çeviren yardımcı fonksiyon 
 const formatTime = (minutes: number) => { 
-  if (minutes <= 0 || !isFinite(minutes)) return "--"; 
+  if (minutes === -1) return "Sınırsız";
+  if (minutes < 0 || !isFinite(minutes)) return "--"; 
+  if (minutes === 0) return "0s 0d";
   if (minutes > 9999) return "Sınırsız"; 
   
   const d = Math.floor(minutes / (24 * 60)); 
   const h = Math.floor((minutes % (24 * 60)) / 60); 
   const m = Math.floor(minutes % 60); 
 
-  if (d > 0) return `${d}g ${h}sa`; 
-  if (h > 0) return `${h}sa ${m}dk`; 
-  return `${m} dk`; 
+  if (d > 0) return `${d}g ${h}s`; 
+  return `${h}s ${m}d`; 
 }; 
 
 export const SystemFlow: React.FC<DashboardProps> = ({ 
@@ -89,6 +91,7 @@ export const SystemFlow: React.FC<DashboardProps> = ({
   voltage = 0, 
   soc = 0, 
   remaining = 0, 
+  onDetailClick,
 }) => { 
   // Undefined/null değerler için güvenli fallback
   const safePvPower = Number(pvPower) || 0;
@@ -112,9 +115,9 @@ export const SystemFlow: React.FC<DashboardProps> = ({
 
       {/* --- ÜST KISIM: Başlık ve Durum --- */} 
       <div className="flex justify-between items-center mb-6 sm:mb-8 pb-4 border-b border-slate-200 dark:border-slate-800"> 
-        <div className="flex flex-col sm:flex-row sm:items-end space-y-1 sm:space-y-0 sm:space-x-3"> 
-          <h1 className="text-xl sm:text-2xl font-bold tracking-wider text-slate-800 dark:text-slate-100">CACIKİ GX</h1> 
-          <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-500 font-medium">© {new Date().getFullYear()} Günay Çağrı Tuzak</span>
+        <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-3"> 
+          <h1 className="text-xl sm:text-2xl font-bold tracking-wider text-slate-800 dark:text-slate-100 leading-none">CACIKİ GX</h1> 
+          <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-500 font-medium leading-none">© {new Date().getFullYear()} Günay Çağrı Tuzak</span>
         </div> 
         <div className="flex items-center space-x-2 bg-white dark:bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700"> 
           <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-green-500 animate-pulse"></div> 
@@ -142,7 +145,7 @@ export const SystemFlow: React.FC<DashboardProps> = ({
         <div className="absolute top-[30%] left-[25%] -translate-x-1/2 -translate-y-1/2 z-10"> 
           <div className="flex flex-col items-center justify-center bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl w-24 h-24 sm:w-32 sm:h-32 shadow-lg hover:border-yellow-500/50 transition-colors"> 
             <Sun className="text-yellow-500 w-8 h-8 sm:w-10 sm:h-10 mb-1 sm:mb-2" /> 
-            <span className="text-[9px] sm:text-xs text-slate-600 dark:text-slate-500 dark:text-slate-400 font-semibold mb-0.5 sm:mb-1 text-center">GÜNEŞ PANELİ</span> 
+            <span className="text-[9px] sm:text-xs text-slate-600 dark:text-slate-500 font-semibold mb-0.5 sm:mb-1 text-center">GÜNEŞ PANELİ</span> 
             <span className="text-sm sm:text-xl font-bold text-yellow-500">{safePvPower.toFixed(0)} W</span> 
           </div> 
         </div> 
@@ -151,7 +154,7 @@ export const SystemFlow: React.FC<DashboardProps> = ({
         <div className="absolute top-[30%] left-[75%] -translate-x-1/2 -translate-y-1/2 z-10"> 
           <div className="flex flex-col items-center justify-center bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl w-24 h-24 sm:w-32 sm:h-32 shadow-lg hover:border-red-500/50 transition-colors"> 
             <Zap className="text-red-500 w-8 h-8 sm:w-10 sm:h-10 mb-1 sm:mb-2" /> 
-            <span className="text-[9px] sm:text-xs text-slate-600 dark:text-slate-500 dark:text-slate-400 font-semibold mb-0.5 sm:mb-1 text-center">DC YÜK</span> 
+            <span className="text-[9px] sm:text-xs text-slate-600 dark:text-slate-500 font-semibold mb-0.5 sm:mb-1 text-center">DC YÜK</span> 
             <span className="text-sm sm:text-xl font-bold text-red-500">{safeLoadPower.toFixed(0)} W</span> 
           </div> 
         </div> 
@@ -171,7 +174,7 @@ export const SystemFlow: React.FC<DashboardProps> = ({
               </span> 
             </div> 
             
-            <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-500 dark:text-slate-400 font-semibold mb-0.5 sm:mb-1">AKÜ</span> 
+            <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-500 font-semibold mb-0.5 sm:mb-1">AKÜ</span> 
             <span className="text-sm sm:text-xl font-bold text-blue-400">{Math.abs(safeBatteryPower).toFixed(0)} W</span> 
             <span className="text-[8px] sm:text-[10px] text-slate-600 dark:text-slate-500 uppercase tracking-wider mt-0.5 sm:mt-1 text-center font-medium"> 
               {batteryStatusLabel} 
@@ -203,11 +206,28 @@ export const SystemFlow: React.FC<DashboardProps> = ({
         <StatCard 
           title="Kalan Süre" 
           value={formatTime(safeRemaining)} 
-          icon={<Clock className="text-slate-600 dark:text-slate-500 dark:text-slate-400 w-5 h-5 sm:w-6 sm:h-6" />} 
-          valueColor="text-slate-900 dark:text-white" 
+          icon={<Clock className="text-purple-400 w-5 h-5 sm:w-6 sm:h-6" />} 
+          valueColor="text-purple-400" 
         /> 
       </div> 
 
+      {/* Detail Buttons */}
+      <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4"> 
+        <button 
+          onClick={() => onDetailClick('solar')} 
+          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 rounded-xl border border-blue-500/20 hover:border-blue-500/50 transition-all group w-full sm:w-auto" 
+        > 
+          <Sun size={18} className="group-hover:rotate-12 transition-transform" /> 
+          <span className="font-semibold text-sm">Solar Şarj Detay</span> 
+        </button> 
+        <button 
+          onClick={() => onDetailClick('battery')} 
+          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-purple-600/10 hover:bg-purple-600/20 text-purple-400 rounded-xl border border-purple-500/20 hover:border-purple-500/50 transition-all group w-full sm:w-auto" 
+        > 
+          <Activity size={18} className="group-hover:scale-110 transition-transform" /> 
+          <span className="font-semibold text-sm">Akü Monitor Detay</span> 
+        </button> 
+      </div> 
     </div> 
   ); 
 };

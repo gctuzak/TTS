@@ -332,7 +332,7 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
                 <Calendar size={16} /> Kullanım Geçmişi
               </div>
               <DetailRow icon={<Clock size={18} />} label="Tüketilen Ah" value={fmt(device.consumed_ah, 'Ah', 1)} />
-              <DetailRow icon={<Clock size={18} />} label="Kalan süre" value={device.remaining_mins === -1 || !device.remaining_mins ? '--' : `${Math.floor(device.remaining_mins / 60)}s ${device.remaining_mins % 60}d`} />
+              <DetailRow icon={<Clock size={18} />} label="Kalan süre" value={device.remaining_mins === -1 ? 'Sınırsız' : (!device.remaining_mins ? '--' : `${Math.floor(device.remaining_mins / 60)}s ${device.remaining_mins % 60}d`)} />
               <DetailRow icon={<Battery size={18} />} label="Marş aküsü (Aux)" value={fmt(device.aux_voltage, 'V')} />
               <DetailRow icon={<Activity size={18} />} label="Minimum Voltaj" value={fmt(device.min_battery_voltage || (device.voltage ? device.voltage - 0.5 : null), 'V')} />
               <DetailRow icon={<Activity size={18} />} label="Maksimum Voltaj" value={fmt(device.max_battery_voltage || (device.voltage ? device.voltage + 0.2 : null), 'V')} />
