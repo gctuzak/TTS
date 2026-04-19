@@ -310,7 +310,7 @@ function App() {
           .lt('created_at', startOfTomorrow.toISOString())
           .in('device_type', [1, 2])
           .order('created_at', { ascending: true })
-          .limit(2000)
+          .limit(10000)
         
         if (historyRes && historyRes.length > 0) {
           setHistoryData(buildHistoryData(historyRes))
