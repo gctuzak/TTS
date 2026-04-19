@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Battery, Zap, Sun, Clock, Power, Activity, Calendar, TrendingUp } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
+import { supabase } from '../lib/supabase';
 
 interface TelemetryRow {
   id: number
@@ -41,6 +43,21 @@ interface DeviceDetailProps {
 
 export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, vmax }) => {
   const [activeTab, setActiveTab] = useState<'status' | 'history' | 'trends'>('status');
+  const [historyWindow, setHistoryWindow] = useState<7 | 30>(7);
+  const [dailyHistory, setDailyHistory] = useState<Array<{
+    dayKey: string;
+    label: string;
+    yield: number;
+    pmax: number;
+    battMax: number | null;
+    battMin: number | null;
+    bulkSec: number;
+    absorptionSec: number;
+    floatSec: number;
+    phaseTotalSec: number;
+    isToday: boolean;
+  }>>([]);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const isSolar = device.device_type === 1;
   const isBattery = device.device_type === 2;
 
@@ -64,6 +81,160 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
   const batteryFlowLabel = batteryPower > 0 ? 'Şarj Oluyor' : batteryPower < 0 ? 'Deşarj Oluyor' : 'Beklemede';
   const loadCurrentNumber = device.load_current === null || device.load_current === undefined ? null : Number(device.load_current);
   const loadCurrentUnknown = loadCurrentNumber === null ? true : loadCurrentNumber < 0 || loadCurrentNumber >= 51.0;
+  const fmtDuration = (seconds: number) => {
+    if (!seconds || seconds <= 0) return '--';
+    const totalMins = Math.round(seconds / 60);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    if (h > 0 && m > 0) return `${h}s ${m}d`;
+    if (h > 0) return `${h}s`;
+    return `${m}d`;
+  };
+  const displayDays = useMemo(
+    () => dailyHistory.slice(-historyWindow),
+    [dailyHistory, historyWindow]
+  );
+  const selectedDay = useMemo(
+    () =>
+      displayDays.find((d) => d.dayKey === selectedDayKey) ??
+      displayDays.find((d) => d.isToday) ??
+      displayDays[displayDays.length - 1] ??
+      null,
+    [displayDays, selectedDayKey]
+  );
+  const phaseRows = useMemo(() => {
+    if (!selectedDay || selectedDay.phaseTotalSec <= 0) return [];
+    const total = selectedDay.phaseTotalSec;
+    const pct = (v: number) => Math.round((v / total) * 100);
+    return [
+      { key: 'float', label: 'Float', sec: selectedDay.floatSec, percent: pct(selectedDay.floatSec) },
+      { key: 'absorption', label: 'Abs', sec: selectedDay.absorptionSec, percent: pct(selectedDay.absorptionSec) },
+      { key: 'bulk', label: 'Bulk', sec: selectedDay.bulkSec, percent: pct(selectedDay.bulkSec) },
+    ].filter((p) => p.sec > 0);
+  }, [selectedDay]);
+
+  useEffect(() => {
+    if (!isSolar || !device.boat_id || !device.mac_address) {
+      setDailyHistory([]);
+      setSelectedDayKey(null);
+      return;
+    }
+
+    const fetchSolarHistory = async () => {
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 30);
+
+      const { data, error } = await supabase
+        .from('telemetry')
+        .select('created_at, yield_today, pv_power, max_pv_power, voltage, min_battery_voltage, max_battery_voltage, device_state')
+        .eq('boat_id', device.boat_id)
+        .eq('mac_address', device.mac_address)
+        .eq('device_type', 1)
+        .gte('created_at', fromDate.toISOString())
+        .order('created_at', { ascending: true });
+
+      if (error || !data) {
+        setDailyHistory([]);
+        setSelectedDayKey(null);
+        return;
+      }
+
+      const byDay = new Map<
+        string,
+        {
+          dayKey: string;
+          dateObj: Date;
+          yield: number;
+          pmax: number;
+          battMax: number | null;
+          battMin: number | null;
+          bulkSec: number;
+          absorptionSec: number;
+          floatSec: number;
+          phaseTotalSec: number;
+          lastTs: number | null;
+          lastState: number | null;
+        }
+      >();
+
+      data.forEach((row) => {
+        const d = new Date(row.created_at);
+        const ts = d.getTime();
+        const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const existing = byDay.get(dayKey) ?? {
+          dayKey,
+          dateObj: new Date(d.getFullYear(), d.getMonth(), d.getDate()),
+          yield: 0,
+          pmax: 0,
+          battMax: null,
+          battMin: null,
+          bulkSec: 0,
+          absorptionSec: 0,
+          floatSec: 0,
+          phaseTotalSec: 0,
+          lastTs: null,
+          lastState: null,
+        };
+
+        const yieldToday = Number(row.yield_today ?? 0);
+        const pvPower = Number(row.pv_power ?? 0);
+        const maxPvPower = Number(row.max_pv_power ?? 0);
+        const voltage = row.voltage !== null && row.voltage !== undefined ? Number(row.voltage) : null;
+        const maxBatt = row.max_battery_voltage !== null && row.max_battery_voltage !== undefined
+          ? Number(row.max_battery_voltage)
+          : null;
+        const minBatt = row.min_battery_voltage !== null && row.min_battery_voltage !== undefined
+          ? Number(row.min_battery_voltage)
+          : null;
+
+        existing.yield = Math.max(existing.yield, yieldToday);
+        existing.pmax = Math.max(existing.pmax, maxPvPower, pvPower);
+        existing.battMax = [existing.battMax, maxBatt, voltage].filter((v): v is number => v !== null)
+          .reduce<number | null>((acc, v) => (acc === null ? v : Math.max(acc, v)), null);
+        existing.battMin = [existing.battMin, minBatt, voltage].filter((v): v is number => v !== null)
+          .reduce<number | null>((acc, v) => (acc === null ? v : Math.min(acc, v)), null);
+        if (existing.lastTs !== null && existing.lastState !== null) {
+          const deltaSec = Math.max(0, Math.round((ts - existing.lastTs) / 1000));
+          // Çok uzun boşluklar örnekleme tutarsızlığında dağılımı bozmasın.
+          const safeDeltaSec = Math.min(deltaSec, 60 * 30);
+          if (safeDeltaSec > 0) {
+            if (existing.lastState === 3) existing.bulkSec += safeDeltaSec;
+            if (existing.lastState === 4) existing.absorptionSec += safeDeltaSec;
+            if (existing.lastState === 5) existing.floatSec += safeDeltaSec;
+            if ([3, 4, 5].includes(existing.lastState)) existing.phaseTotalSec += safeDeltaSec;
+          }
+        }
+        existing.lastTs = ts;
+        existing.lastState = row.device_state !== null && row.device_state !== undefined ? Number(row.device_state) : null;
+
+        byDay.set(dayKey, existing);
+      });
+
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const normalized = Array.from(byDay.values())
+        .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
+        .map((d, idx, arr) => ({
+          dayKey: d.dayKey,
+          label: d.dayKey === todayKey ? 'Bugün' : idx === arr.length - 2 && todayKey === arr[arr.length - 1]?.dayKey ? 'Dün' : d.dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }),
+          yield: d.yield,
+          pmax: d.pmax,
+          battMax: d.battMax,
+          battMin: d.battMin,
+          bulkSec: d.bulkSec,
+          absorptionSec: d.absorptionSec,
+          floatSec: d.floatSec,
+          phaseTotalSec: d.phaseTotalSec,
+          isToday: d.dayKey === todayKey,
+        }));
+
+      setDailyHistory(normalized);
+      const defaultDay = normalized.find((d) => d.isToday) ?? normalized[normalized.length - 1] ?? null;
+      setSelectedDayKey(defaultDay?.dayKey ?? null);
+    };
+
+    fetchSolarHistory();
+  }, [device.boat_id, device.mac_address, isSolar]);
 
   return (
     <div className="bg-[#1e88e5] text-white rounded-xl overflow-hidden shadow-lg max-w-sm mx-auto mb-4 font-sans">
@@ -175,6 +346,101 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
               <div className="px-4 py-3 bg-[#1976d2] text-sm font-semibold flex items-center gap-2">
                 <Calendar size={16} /> Üretim Geçmişi
               </div>
+              <div className="px-4 pt-4 pb-2 bg-[#0d47a1] border-b border-white/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs uppercase tracking-wide text-white/70">Günlük Verim</div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <button
+                      onClick={() => setHistoryWindow(7)}
+                      className={`px-2 py-1 rounded ${historyWindow === 7 ? 'bg-[#42a5f5] text-white' : 'bg-white/10 text-white/70 hover:text-white'}`}
+                    >
+                      7 Gün
+                    </button>
+                    <button
+                      onClick={() => setHistoryWindow(30)}
+                      className={`px-2 py-1 rounded ${historyWindow === 30 ? 'bg-[#42a5f5] text-white' : 'bg-white/10 text-white/70 hover:text-white'}`}
+                    >
+                      30 Gün
+                    </button>
+                  </div>
+                </div>
+                <div className="h-44 w-full">
+                  {displayDays.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={displayDays}>
+                        <XAxis dataKey="label" stroke="#bbdefb" fontSize={11} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#bbdefb" fontSize={11} width={36} tickLine={false} axisLine={false} />
+                        <Tooltip
+                          formatter={(value: number | string | undefined) => [`${Number(value ?? 0).toFixed(2)} kWh`, 'Verim']}
+                          labelFormatter={(label) => `Gün: ${label}`}
+                          contentStyle={{ backgroundColor: '#0b3d91', border: '1px solid #42a5f5', borderRadius: 8, color: '#fff' }}
+                        />
+                        <Bar
+                          dataKey="yield"
+                          radius={[6, 6, 0, 0]}
+                          onClick={(barData: any) => setSelectedDayKey(barData?.dayKey ?? null)}
+                          cursor="pointer"
+                        >
+                          {displayDays.map((entry) => (
+                            <Cell
+                              key={entry.dayKey}
+                              fill={selectedDay?.dayKey === entry.dayKey ? '#90caf9' : '#42a5f5'}
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-sm text-white/60">
+                      Son günlere ait SmartSolar geçmiş verisi bulunamadı.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="px-4 py-3 bg-[#1565c0] border-b border-white/10">
+                <div className="text-sm font-semibold mb-3">
+                  {selectedDay ? `${selectedDay.label} Özeti` : 'Gün Özeti'}
+                </div>
+                <div className="rounded-lg border border-white/10 overflow-hidden text-sm">
+                  <div className="px-3 py-2 bg-[#0d47a1] font-semibold text-white/90">Güneş Paneli</div>
+                  <div className="px-3 py-2 flex justify-between border-t border-white/10">
+                    <span className="text-white/75">Verim (yield_today)</span>
+                    <span className="font-semibold">{fmt(selectedDay?.yield ?? null, 'kWh')}</span>
+                  </div>
+                  <div className="px-3 py-2 flex justify-between border-t border-white/10">
+                    <span className="text-white/75">P max</span>
+                    <span className="font-semibold">{fmt(selectedDay?.pmax ?? null, 'W', 0)}</span>
+                  </div>
+
+                  <div className="px-3 py-2 bg-[#0d47a1] font-semibold text-white/90 border-t border-white/10">Akü</div>
+                  <div className="px-3 py-2 flex justify-between border-t border-white/10">
+                    <span className="text-white/75">Voltaj Maks.</span>
+                    <span className="font-semibold">{fmt(selectedDay?.battMax ?? null, 'V')}</span>
+                  </div>
+                  <div className="px-3 py-2 flex justify-between border-t border-white/10">
+                    <span className="text-white/75">Voltaj Min.</span>
+                    <span className="font-semibold">{fmt(selectedDay?.battMin ?? null, 'V')}</span>
+                  </div>
+                </div>
+                <div className="mt-3 rounded-lg border border-white/10 overflow-hidden text-sm">
+                  <div className="px-3 py-2 bg-[#0d47a1] font-semibold text-white/90">Şarj Aşamaları</div>
+                  {phaseRows.length > 0 ? (
+                    phaseRows.map((phase) => (
+                      <div key={phase.key} className="px-3 py-2 flex items-center justify-between border-t border-white/10">
+                        <span className="text-white/85">{phase.label}</span>
+                        <span className="text-white/80">{fmtDuration(phase.sec)}</span>
+                        <span className="font-semibold text-white">{phase.percent}%</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 border-t border-white/10 text-white/60">
+                      Bu gün için faz süresi hesaplayacak yeterli ardışık kayıt yok.
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <DetailRow icon={<Zap size={18} />} label="Bugünkü Üretim" value={fmt(device.yield_today, 'kWh')} />
               <DetailRow icon={<Power size={18} />} label="Toplam Üretim" value={fmt(device.total_yield, 'kWh')} />
               <DetailRow icon={<Activity size={18} />} label="Dönüşüm Verimi" value={fmt(device.efficiency, '%')} />
