@@ -1,1 +1,25 @@
 /* Empty for now - using Tailwind classes in App.tsx */
+.chart-container .recharts-cartesian-grid-horizontal line,
+.chart-container .recharts-cartesian-grid-vertical line {
+  stroke: #e5e7eb; /* light mode grid: gray-200 */
+}
+.dark .chart-container .recharts-cartesian-grid-horizontal line,
+.dark .chart-container .recharts-cartesian-grid-vertical line {
+  stroke: #374151; /* dark mode grid: gray-700 */
+}
+
+.chart-container .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+}
+.chart-container .recharts-tooltip-wrapper .recharts-tooltip-item {
+  color: #111827 !important;
+}
+
+.dark .chart-container .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: #1f2937 !important;
+  border: 1px solid #374151 !important;
+}
+.dark .chart-container .recharts-tooltip-wrapper .recharts-tooltip-item {
+  color: #ffffff !important;
+}

@@ -124,30 +124,30 @@ export default function UpdateDevice() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-white dark:bg-gray-900 text-slate-900 dark:text-white p-6">
       <div className="max-w-2xl mx-auto mt-12">
         
         <button 
           onClick={() => navigate('/')}
-          className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 transition"
+          className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-slate-900 dark:text-white mb-8 transition"
         >
           <ArrowLeft className="w-5 h-5" /> Anasayfaya Dön
         </button>
 
-        <div className="bg-gray-800 rounded-2xl border border-gray-700 p-8 text-center shadow-xl">
+        <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl border border-gray-300 dark:border-gray-700 p-8 text-center shadow-xl">
           <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
             <Usb className="w-10 h-10 text-blue-400" />
           </div>
           
           <h1 className="text-3xl font-bold mb-4">Cihaz Yazılımı Güncelleme</h1>
-          <p className="text-gray-400 mb-8 max-w-md mx-auto">
+          <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto">
             Cihazınızı USB Type-C kablosu ile bilgisayarınıza bağlayın. İşlem sırasında kabloyu kesinlikle çıkarmayın. Bu özellik sadece Google Chrome ve Microsoft Edge tarayıcılarında çalışır.
           </p>
 
           {status === 'idle' || status === 'error' ? (
             <button 
               onClick={handleFlash}
-              className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-lg transition flex items-center justify-center gap-3 mx-auto"
+              className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-500 text-slate-900 dark:text-white rounded-xl font-semibold text-lg transition flex items-center justify-center gap-3 mx-auto"
             >
               <DownloadCloud className="w-6 h-6" />
               Cihazı Güncelle
@@ -159,21 +159,21 @@ export default function UpdateDevice() {
               <p>Cihazınız başarıyla güncellendi. Artık kabloyu çıkarıp teknenize bağlayabilirsiniz.</p>
             </div>
           ) : (
-            <div className="bg-gray-900 rounded-xl p-6 border border-gray-700 mb-6">
+            <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-300 dark:border-gray-700 mb-6">
               <Loader2 className="w-10 h-10 text-blue-500 animate-spin mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-4">
                 {status === 'connecting' ? 'Cihaza Bağlanılıyor...' : 'Yazılım Atılıyor...'}
               </h3>
               
-              <div className="w-full bg-gray-800 rounded-full h-4 mb-2 overflow-hidden border border-gray-700">
+              <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-4 mb-2 overflow-hidden border border-gray-300 dark:border-gray-700">
                 <div className="bg-blue-500 h-4 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
               </div>
-              <p className="text-sm text-gray-400 text-right">{progress}%</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 text-right">{progress}%</p>
             </div>
           )}
 
           {/* Terminal Logs */}
-          <div className="mt-8 text-left bg-black/50 p-4 rounded-lg border border-gray-800 font-mono text-xs text-gray-400 h-48 overflow-y-auto">
+          <div className="mt-8 text-left bg-black/50 p-4 rounded-lg border border-gray-200 dark:border-gray-800 font-mono text-xs text-gray-600 dark:text-gray-400 h-48 overflow-y-auto">
             {logs.length === 0 ? (
               <span className="text-gray-600">Sistem logları burada görünecektir...</span>
             ) : (

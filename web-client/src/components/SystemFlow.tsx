@@ -56,13 +56,13 @@ const FlowLine: React.FC<{ x1: string; y1: string; x2: string; y2: string; power
 }; 
 
 // Alt kısımdaki istatistik kartları için alt bileşen 
-const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; valueColor?: string }> = ({ title, value, icon, valueColor = "text-white" }) => ( 
-  <div className="flex items-center p-3 sm:p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-sm hover:bg-slate-700/50 transition-colors"> 
-    <div className="flex shrink-0 items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-900/80 mr-3 sm:mr-4 border border-slate-700"> 
+const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; valueColor?: string }> = ({ title, value, icon, valueColor = "text-slate-900 dark:text-white" }) => ( 
+  <div className="flex items-center p-3 sm:p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:bg-slate-700/50 transition-colors"> 
+    <div className="flex shrink-0 items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-50 dark:bg-slate-900/80 mr-3 sm:mr-4 border border-slate-200 dark:border-slate-700"> 
       {icon} 
     </div> 
     <div className="overflow-hidden"> 
-      <p className="text-[10px] sm:text-xs text-slate-400 font-medium mb-0.5 truncate">{title}</p> 
+      <p className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-500 dark:text-slate-400 font-medium mb-0.5 truncate">{title}</p> 
       <p className={`text-base sm:text-lg font-bold truncate ${valueColor}`}>{value}</p> 
     </div> 
   </div> 
@@ -101,7 +101,7 @@ export const SystemFlow: React.FC<DashboardProps> = ({
     safeLoadPower > safePvPower ? 'Deşarj Oluyor' : safeLoadPower < safePvPower ? 'Şarj Oluyor' : 'Beklemede';
 
   return ( 
-    <div className="w-full max-w-4xl mx-auto p-4 sm:p-6 bg-slate-900 rounded-2xl text-white shadow-2xl border border-slate-800 font-sans"> 
+    <div className="w-full max-w-4xl mx-auto p-4 sm:p-6 bg-slate-50 dark:bg-slate-900 rounded-2xl text-slate-900 dark:text-white shadow-2xl border border-slate-200 dark:border-slate-800 font-sans"> 
       {/* Animasyon Keyframes Tanımı */} 
       <style>{` 
         @keyframes dash-flow { 
@@ -111,19 +111,19 @@ export const SystemFlow: React.FC<DashboardProps> = ({
       `}</style> 
 
       {/* --- ÜST KISIM: Başlık ve Durum --- */} 
-      <div className="flex justify-between items-center mb-6 sm:mb-8 pb-4 border-b border-slate-800"> 
+      <div className="flex justify-between items-center mb-6 sm:mb-8 pb-4 border-b border-slate-200 dark:border-slate-800"> 
         <div className="flex flex-col sm:flex-row sm:items-end space-y-1 sm:space-y-0 sm:space-x-3"> 
-          <h1 className="text-xl sm:text-2xl font-bold tracking-wider text-slate-100">CACIKİ GX</h1> 
-          <span className="text-[10px] sm:text-xs text-slate-500 font-medium">© {new Date().getFullYear()} Günay Çağrı Tuzak</span>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-wider text-slate-800 dark:text-slate-100">CACIKİ GX</h1> 
+          <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-500 font-medium">© {new Date().getFullYear()} Günay Çağrı Tuzak</span>
         </div> 
-        <div className="flex items-center space-x-2 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700"> 
+        <div className="flex items-center space-x-2 bg-white dark:bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700"> 
           <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-green-500 animate-pulse"></div> 
           <span className="text-xs sm:text-sm font-medium text-green-400">Canlı</span> 
         </div> 
       </div> 
 
       {/* --- ORTA KISIM: Enerji Akış Şeması --- */} 
-      <div className="relative h-64 sm:h-80 w-full mb-8 rounded-xl bg-slate-900/50 border border-slate-800/50 overflow-hidden"> 
+      <div className="relative h-64 sm:h-80 w-full mb-8 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800/50 overflow-hidden"> 
         
         {/* SVG Bağlantı Çizgileri */} 
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-0"> 
@@ -136,31 +136,31 @@ export const SystemFlow: React.FC<DashboardProps> = ({
         </svg> 
 
         {/* Merkez Birleşim Noktası */} 
-        <div className="absolute top-[30%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-slate-700 rounded-full border-2 border-slate-500 z-0"></div> 
+        <div className="absolute top-[30%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-slate-700 rounded-full border-2 border-slate-300 dark:border-slate-500 z-0"></div> 
 
         {/* DÜĞÜM 1: GÜNEŞ PANELİ */} 
         <div className="absolute top-[30%] left-[25%] -translate-x-1/2 -translate-y-1/2 z-10"> 
-          <div className="flex flex-col items-center justify-center bg-slate-800 border-2 border-slate-700 rounded-xl w-24 h-24 sm:w-32 sm:h-32 shadow-lg hover:border-yellow-500/50 transition-colors"> 
+          <div className="flex flex-col items-center justify-center bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl w-24 h-24 sm:w-32 sm:h-32 shadow-lg hover:border-yellow-500/50 transition-colors"> 
             <Sun className="text-yellow-500 w-8 h-8 sm:w-10 sm:h-10 mb-1 sm:mb-2" /> 
-            <span className="text-[9px] sm:text-xs text-slate-400 font-semibold mb-0.5 sm:mb-1 text-center">GÜNEŞ PANELİ</span> 
+            <span className="text-[9px] sm:text-xs text-slate-600 dark:text-slate-500 dark:text-slate-400 font-semibold mb-0.5 sm:mb-1 text-center">GÜNEŞ PANELİ</span> 
             <span className="text-sm sm:text-xl font-bold text-yellow-500">{safePvPower.toFixed(0)} W</span> 
           </div> 
         </div> 
 
         {/* DÜĞÜM 2: DC YÜK */} 
         <div className="absolute top-[30%] left-[75%] -translate-x-1/2 -translate-y-1/2 z-10"> 
-          <div className="flex flex-col items-center justify-center bg-slate-800 border-2 border-slate-700 rounded-xl w-24 h-24 sm:w-32 sm:h-32 shadow-lg hover:border-red-500/50 transition-colors"> 
+          <div className="flex flex-col items-center justify-center bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl w-24 h-24 sm:w-32 sm:h-32 shadow-lg hover:border-red-500/50 transition-colors"> 
             <Zap className="text-red-500 w-8 h-8 sm:w-10 sm:h-10 mb-1 sm:mb-2" /> 
-            <span className="text-[9px] sm:text-xs text-slate-400 font-semibold mb-0.5 sm:mb-1 text-center">DC YÜK</span> 
+            <span className="text-[9px] sm:text-xs text-slate-600 dark:text-slate-500 dark:text-slate-400 font-semibold mb-0.5 sm:mb-1 text-center">DC YÜK</span> 
             <span className="text-sm sm:text-xl font-bold text-red-500">{safeLoadPower.toFixed(0)} W</span> 
           </div> 
         </div> 
 
         {/* DÜĞÜM 3: AKÜ */} 
         <div className="absolute top-[80%] left-[50%] -translate-x-1/2 -translate-y-1/2 z-10"> 
-          <div className="flex flex-col items-center justify-center bg-slate-800 border-2 border-slate-700 rounded-xl w-28 h-28 sm:w-36 sm:h-36 shadow-lg hover:border-blue-500/50 transition-colors"> 
+          <div className="flex flex-col items-center justify-center bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl w-28 h-28 sm:w-36 sm:h-36 shadow-lg hover:border-blue-500/50 transition-colors"> 
             {/* Dinamik Pil İkonu */} 
-            <div className="relative w-12 h-6 sm:w-16 sm:h-8 border-2 border-slate-500 rounded-sm sm:rounded-md mb-1 sm:mb-2 flex items-center p-[2px]"> 
+            <div className="relative w-12 h-6 sm:w-16 sm:h-8 border-2 border-slate-300 dark:border-slate-500 rounded-sm sm:rounded-md mb-1 sm:mb-2 flex items-center p-[2px]"> 
               <div className="absolute -right-1.5 sm:-right-2 top-1/2 -translate-y-1/2 w-1 sm:w-1.5 h-3 sm:h-4 bg-slate-500 rounded-r-sm"></div> 
               <div 
                 className={`h-full rounded-sm transition-all duration-500 ${safeSoc > 50 ? 'bg-green-500' : safeSoc > 20 ? 'bg-yellow-500' : 'bg-red-500'}`} 
@@ -171,9 +171,9 @@ export const SystemFlow: React.FC<DashboardProps> = ({
               </span> 
             </div> 
             
-            <span className="text-[10px] sm:text-xs text-slate-400 font-semibold mb-0.5 sm:mb-1">AKÜ</span> 
+            <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-500 dark:text-slate-400 font-semibold mb-0.5 sm:mb-1">AKÜ</span> 
             <span className="text-sm sm:text-xl font-bold text-blue-400">{Math.abs(safeBatteryPower).toFixed(0)} W</span> 
-            <span className="text-[8px] sm:text-[10px] text-slate-500 uppercase tracking-wider mt-0.5 sm:mt-1 text-center font-medium"> 
+            <span className="text-[8px] sm:text-[10px] text-slate-600 dark:text-slate-500 uppercase tracking-wider mt-0.5 sm:mt-1 text-center font-medium"> 
               {batteryStatusLabel} 
             </span> 
           </div> 
@@ -186,7 +186,7 @@ export const SystemFlow: React.FC<DashboardProps> = ({
           title="Akü Voltajı" 
           value={`${safeVoltage.toFixed(1)} V`} 
           icon={<Activity className="text-blue-400 w-5 h-5 sm:w-6 sm:h-6" />} 
-          valueColor="text-white" 
+          valueColor="text-slate-900 dark:text-white" 
         /> 
         <StatCard 
           title="Solar Güç" 
@@ -203,8 +203,8 @@ export const SystemFlow: React.FC<DashboardProps> = ({
         <StatCard 
           title="Kalan Süre" 
           value={formatTime(safeRemaining)} 
-          icon={<Clock className="text-slate-400 w-5 h-5 sm:w-6 sm:h-6" />} 
-          valueColor="text-white" 
+          icon={<Clock className="text-slate-600 dark:text-slate-500 dark:text-slate-400 w-5 h-5 sm:w-6 sm:h-6" />} 
+          valueColor="text-slate-900 dark:text-white" 
         /> 
       </div> 
 

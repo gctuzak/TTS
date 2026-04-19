@@ -28,7 +28,7 @@ export const StatCard: React.FC<StatCardProps> = ({
         <div>
           <p className="text-sm font-medium opacity-80">{title}</p>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-white">{value}</span>
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">{value}</span>
             <span className="text-sm opacity-60">{unit}</span>
           </div>
         </div>

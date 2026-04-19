@@ -6,7 +6,7 @@ import { Auth } from './components/Auth'
 import { SystemFlow } from './components/SystemFlow'
 import { HistoryCharts } from './components/HistoryCharts'
 import { DeviceDetail } from './components/DeviceDetail'
-import { LogOut, Settings, DownloadCloud } from 'lucide-react'
+import { LogOut, Settings, DownloadCloud, Sun, Moon } from 'lucide-react'
 import './App.css'
 
 // Veritabanı tipleri
@@ -56,6 +56,24 @@ function App() {
   const [debugLog, setDebugLog] = useState<string>("")
   const [isAdmin, setIsAdmin] = useState(false)
   const navigate = useNavigate()
+
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    }
+    return true
+  })
+
+  useEffect(() => {
+    const root = window.document.documentElement
+    if (isDark) {
+      root.classList.add('dark')
+      localStorage.setItem('theme', 'dark')
+    } else {
+      root.classList.remove('dark')
+      localStorage.setItem('theme', 'light')
+    }
+  }, [isDark])
 
   // Cihaz bazlı son verileri tutan map: mac_address -> TelemetryRow
 
@@ -446,7 +464,7 @@ function App() {
   }
 
   if (loading) {
-    return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">Yükleniyor...</div>
+    return <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center text-slate-900 dark:text-white">Yükleniyor...</div>
   }
 
   if (!session) {
@@ -455,13 +473,13 @@ function App() {
 
   if (needsClaim) {
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white p-4 font-sans">
-        <div className="max-w-md w-full bg-gray-900 rounded-xl p-8 shadow-2xl border border-gray-800">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center text-slate-900 dark:text-white p-4 font-sans">
+        <div className="max-w-md w-full bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl border border-gray-200 dark:border-gray-800">
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
               Yeni Tekne Ekle
             </h1>
-            <p className="text-gray-400 mt-2 text-sm">
+            <p className="text-gray-600 dark:text-gray-400 mt-2 text-sm">
               Takibini yapmak istediğiniz teknenin adını aşağıya girin. <br /><br />
               Kaydet butonuna bastığınızda size özel bir <strong>Cihaz Şifresi (PIN)</strong> üretilecektir.
             </p>
@@ -470,7 +488,7 @@ function App() {
           <form onSubmit={handleRegisterBoat} className="space-y-6">
             {debugLog && <div className="text-xs text-yellow-500 bg-black p-2 rounded">{debugLog}</div>}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
                 Tekne Adı
               </label>
               <input
@@ -478,7 +496,7 @@ function App() {
                 value={boatNameInput}
                 onChange={(e) => setBoatNameInput(e.target.value)}
                 placeholder="Örn: YAKAMOZ"
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-500"
+                className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900 dark:text-white placeholder-gray-500"
               />
             </div>
             {claimError && <div className="text-red-400 text-sm text-center">{claimError}</div>}
@@ -496,21 +514,21 @@ function App() {
 
   if (!boat) {
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white p-4">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center text-slate-900 dark:text-white p-4">
         <h1 className="text-2xl mb-4">Tekne Bilgisi Yükleniyor...</h1>
-        <p className="text-gray-400">Veritabanı bağlantısı kuruluyor.</p>
+        <p className="text-gray-600 dark:text-gray-400">Veritabanı bağlantısı kuruluyor.</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-4 md:p-8 font-sans">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-slate-900 dark:text-white p-4 md:p-8 font-sans">
       <header className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
             {boat.name}
           </h1>
-          <p className="text-gray-400 text-sm mt-1">Tekne Telemetri Sistemi</p>
+          <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Tekne Telemetri Sistemi</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
@@ -537,8 +555,15 @@ function App() {
             </button>
           )}
           <button
+            onClick={() => setIsDark(!isDark)}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-gray-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+            title={isDark ? "Açık Tema" : "Koyu Tema"}
+          >
+            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <button
             onClick={() => supabase.auth.signOut()}
-            className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-gray-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
             title="Çıkış Yap"
           >
             <LogOut size={20} />
@@ -563,7 +588,7 @@ function App() {
         </section>
 
         <section>
-          <h2 className="text-xl font-bold mb-4 text-gray-300">Cihaz Detayları</h2>
+          <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-300">Cihaz Detayları</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Object.values(deviceMap).map((device) => {
               const maxes = device.mac_address ? maxDataMap[device.mac_address] : null
