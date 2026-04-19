@@ -11,8 +11,8 @@ import {
 
 interface ChartData {
   time: string;
-  voltage: number;
-  solar: number;
+  voltage?: number;
+  solar?: number;
 }
 
 interface HistoryChartsProps {

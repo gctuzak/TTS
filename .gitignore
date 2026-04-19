@@ -17,6 +17,8 @@ firmware/temp_pio_core/
 *.map
 *.hex
 
+!web-client/public/firmware/*.bin
+
 # Node.js
 node_modules/
 npm-debug.log

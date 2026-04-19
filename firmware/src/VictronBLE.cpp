@@ -187,11 +187,23 @@ void VictronBLE::parseDecryptedData(const uint8_t* data, size_t len, VictronData
 
         // 10-11: Load Current (9 bits, 0.1A)
         // Repo: vic_9bit_0_1_negative load_current : 9;
-        uint16_t load_raw = getU16(10);
-        result.loadCurrent = (float)(load_raw & 0x1FF) / 10.0;
-        
-        // Bit 9: Load State (1=On, 0=Off) - Tahmini
-        result.loadState = (load_raw & 0x200) ? 1 : 0;
+        if (len >= 12) {
+            uint16_t load_raw = getU16(10);
+
+            int16_t load_current_9 = (int16_t)(load_raw & 0x1FF);
+            if (load_current_9 & 0x100) {
+                load_current_9 |= (int16_t)~0x1FF;
+            }
+
+            // 0x1FF -> -1 -> -0.1A genelde "unknown/unset" olarak görülüyor.
+            result.loadCurrent = (load_current_9 == -1) ? -1.0f : (float)load_current_9 / 10.0f;
+
+            // Bit 9: Load State (1=On, 0=Off)
+            result.loadState = (load_raw & 0x200) ? 1 : 0;
+        } else {
+            result.loadCurrent = -1.0f;
+            result.loadState = -1;
+        }
 
         // PV Voltage/Current: BLE Advertisement paketinde bulunmuyor.
         // Ancak 0W ise 0 kabul edebiliriz.

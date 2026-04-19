@@ -97,6 +97,8 @@ export const SystemFlow: React.FC<DashboardProps> = ({
   const safeVoltage = Number(voltage) || 0;
   const safeSoc = Number(soc) || 0;
   const safeRemaining = Number(remaining) || 0;
+  const batteryStatusLabel =
+    safeLoadPower > safePvPower ? 'Deşarj Oluyor' : safeLoadPower < safePvPower ? 'Şarj Oluyor' : 'Beklemede';
 
   return ( 
     <div className="w-full max-w-4xl mx-auto p-4 sm:p-6 bg-slate-900 rounded-2xl text-white shadow-2xl border border-slate-800 font-sans"> 
@@ -171,7 +173,7 @@ export const SystemFlow: React.FC<DashboardProps> = ({
             <span className="text-[10px] sm:text-xs text-slate-400 font-semibold mb-0.5 sm:mb-1">AKÜ</span> 
             <span className="text-sm sm:text-xl font-bold text-blue-400">{Math.abs(safeBatteryPower).toFixed(0)} W</span> 
             <span className="text-[8px] sm:text-[10px] text-slate-500 uppercase tracking-wider mt-0.5 sm:mt-1 text-center font-medium"> 
-              {safeBatteryPower > 0 ? 'Şarj Oluyor' : safeBatteryPower < 0 ? 'Deşarj Oluyor' : 'Beklemede'} 
+              {batteryStatusLabel} 
             </span> 
           </div> 
         </div> 

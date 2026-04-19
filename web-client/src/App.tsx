@@ -61,7 +61,7 @@ function App() {
   const [deviceMap, setDeviceMap] = useState<Record<string, TelemetryRow>>({})
 
   // Geçmiş verileri (Grafik için)
-  const [historyData, setHistoryData] = useState<any[]>([])
+  const [historyData, setHistoryData] = useState<Array<{ bucket: number; time: string; voltage?: number; solar?: number }>>([])
 
   // Günlük maksimum veriler map: mac_address -> {pmax, vmax}
   const [maxDataMap, setMaxDataMap] = useState<Record<string, { pmax: number, vmax: number }>>({})
@@ -89,6 +89,79 @@ function App() {
       setDeviceMap({})
       setNeedsClaim(false) // Oturum yoksa claim ekranı gösterme
       return
+    }
+
+    const getBucketMs = (createdAt: string) => {
+      const d = new Date(createdAt)
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()).getTime()
+    }
+
+    const formatBucketLabel = (bucketMs: number) =>
+      new Date(bucketMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+    const buildHistoryData = (rows: Array<{ created_at: string; voltage: any; pv_power: any; device_type: any }>) => {
+      const byBucket = new Map<number, { bucket: number; time: string; voltage?: number; solar?: number }>()
+
+      rows.forEach((r) => {
+        const bucket = getBucketMs(r.created_at)
+        const existing = byBucket.get(bucket) ?? { bucket, time: formatBucketLabel(bucket) }
+
+        if (r.device_type === 2) {
+          if (existing.voltage === undefined && r.voltage !== null && r.voltage !== undefined) {
+            existing.voltage = Number(r.voltage)
+          }
+        } else if (r.device_type === 1) {
+          if (existing.solar === undefined && r.pv_power !== null && r.pv_power !== undefined) {
+            existing.solar = Number(r.pv_power)
+          }
+        }
+
+        byBucket.set(bucket, existing)
+      })
+
+      return Array.from(byBucket.values())
+        .sort((a, b) => a.bucket - b.bucket)
+        .slice(-24)
+    }
+
+    const upsertHistoryPoint = (
+      prev: Array<{ bucket: number; time: string; voltage?: number; solar?: number }>,
+      newRow: TelemetryRow
+    ) => {
+      if (newRow.device_type !== 1 && newRow.device_type !== 2) return prev
+
+      const bucket = getBucketMs(newRow.created_at)
+      const idx = prev.findIndex((p) => p.bucket === bucket)
+
+      if (idx === -1) {
+        const nextPoint: { bucket: number; time: string; voltage?: number; solar?: number } = {
+          bucket,
+          time: formatBucketLabel(bucket),
+        }
+
+        if (newRow.device_type === 2 && newRow.voltage !== null && newRow.voltage !== undefined) {
+          nextPoint.voltage = Number(newRow.voltage)
+        }
+        if (newRow.device_type === 1 && newRow.pv_power !== null && newRow.pv_power !== undefined) {
+          nextPoint.solar = Number(newRow.pv_power)
+        }
+
+        return [...prev, nextPoint].sort((a, b) => a.bucket - b.bucket).slice(-24)
+      }
+
+      const existing = prev[idx]
+      const updated = { ...existing }
+
+      if (newRow.device_type === 2 && newRow.voltage !== null && newRow.voltage !== undefined) {
+        updated.voltage = Number(newRow.voltage)
+      }
+      if (newRow.device_type === 1 && newRow.pv_power !== null && newRow.pv_power !== undefined) {
+        updated.solar = Number(newRow.pv_power)
+      }
+
+      const next = [...prev]
+      next[idx] = updated
+      return next.sort((a, b) => a.bucket - b.bucket).slice(-24)
     }
 
     const fetchBoat = async () => {
@@ -168,19 +241,7 @@ function App() {
           .limit(100) // Son 100 kaydı alıp birleştirelim
         
         if (historyRes && historyRes.length > 0) {
-          // Gelen dağınık verileri zamana göre gruplayıp grafiğe uygun hale getiriyoruz
-          // Basit bir yaklaşım olarak son 24 veriyi ters çevirip ekleyelim (zaman sırasına sokalım)
-          const formattedHistory = historyRes
-            .filter(r => r.device_type === 2) // Ana grafiği Battery Monitor'e (Akü Voltajı) göre dizelim
-            .slice(0, 24)
-            .reverse()
-            .map(r => ({
-              time: new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              voltage: Number(r.voltage) || 0,
-              solar: Number(r.pv_power) || 0
-            }))
-          
-          setHistoryData(formattedHistory)
+          setHistoryData(buildHistoryData(historyRes))
         }
 
         // Realtime Abonelik
@@ -202,18 +263,7 @@ function App() {
                   ...prev,
                   [`${newRow.mac_address}`]: newRow
                 }))
-
-                // Grafik verisi güncelleme (Sadece geçerli veri geldiğinde)
-                if (newRow.device_type === 2 && newRow.voltage) {
-                  setHistoryData(prev => {
-                    const newData = [...prev, {
-                      time: new Date(newRow.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                      voltage: Number(newRow.voltage),
-                      solar: Number(newRow.pv_power) || 0
-                    }].slice(-24)
-                    return newData
-                  })
-                }
+                setHistoryData(prev => upsertHistoryPoint(prev, newRow))
               }
             }
           )

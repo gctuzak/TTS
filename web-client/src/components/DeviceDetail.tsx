@@ -60,8 +60,10 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
 
   // Calculations if missing
   const batteryPower = device.power ?? (device.voltage && device.current ? device.voltage * device.current : 0);
-  const pvCurrent = device.pv_current ?? (device.pv_power && device.pv_voltage ? device.pv_power / device.pv_voltage : 0);
   const chargeStateLabel = device.charge_state || (mpptStates[device.device_state || 0] || 'Bilinmiyor');
+  const batteryFlowLabel = batteryPower > 0 ? 'Şarj Oluyor' : batteryPower < 0 ? 'Deşarj Oluyor' : 'Beklemede';
+  const loadCurrentNumber = device.load_current === null || device.load_current === undefined ? null : Number(device.load_current);
+  const loadCurrentUnknown = loadCurrentNumber === null ? true : loadCurrentNumber < 0 || loadCurrentNumber >= 51.0;
 
   return (
     <div className="bg-[#1e88e5] text-white rounded-xl overflow-hidden shadow-lg max-w-sm mx-auto mb-4 font-sans">
@@ -103,7 +105,7 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
                 {isBattery ? (
                   <>
                     <div className="text-5xl font-light">{device.soc?.toFixed(0) ?? '--'}%</div>
-                    <div className="text-sm opacity-70 mt-1">{device.soc === 100 ? 'Dolu' : 'Şarj Oluyor'}</div>
+                    <div className="text-sm opacity-70 mt-1">{batteryFlowLabel}</div>
                   </>
                 ) : (
                   <>
@@ -134,16 +136,17 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
 
             {isSolar && (
               <>
-                <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Solar</div>
-                <DetailRow icon={<Sun size={18} />} label="Voltaj" value={fmt(device.pv_voltage, 'V')} />
-                <DetailRow icon={<Activity size={18} />} label="Akım" value={fmt(pvCurrent, 'A')} />
                 <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Akü</div>
                 <DetailRow icon={<Battery size={18} />} label="Voltaj" value={fmt(device.voltage, 'V')} />
                 <DetailRow icon={<Activity size={18} />} label="Akım" value={fmt(device.current, 'A')} />
                 <DetailRow icon={<Activity size={18} />} label="Durum" value={chargeStateLabel} />
                 <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Virtüel yük çıkışı</div>
-                <DetailRow icon={<Activity size={18} />} label="Durum" value={device.load_state === 1 ? 'Açık' : 'Kapalı'} />
-                <DetailRow icon={<Zap size={18} />} label="Akım" value={fmt(device.load_current, 'A')} />
+                <DetailRow
+                  icon={<Activity size={18} />}
+                  label="Durum"
+                  value={loadCurrentUnknown ? '--' : device.load_state === 1 ? 'Açık' : 'Kapalı'}
+                />
+                <DetailRow icon={<Zap size={18} />} label="Akım" value={fmt(loadCurrentUnknown ? null : loadCurrentNumber, 'A')} />
               </>
             )}
             <div className="h-4"></div>
