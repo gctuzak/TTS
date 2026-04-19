@@ -112,8 +112,9 @@ export const SystemFlow: React.FC<DashboardProps> = ({
 
       {/* --- ÜST KISIM: Başlık ve Durum --- */} 
       <div className="flex justify-between items-center mb-6 sm:mb-8 pb-4 border-b border-slate-800"> 
-        <div className="flex items-center space-x-3"> 
+        <div className="flex flex-col sm:flex-row sm:items-end space-y-1 sm:space-y-0 sm:space-x-3"> 
           <h1 className="text-xl sm:text-2xl font-bold tracking-wider text-slate-100">CACIKİ GX</h1> 
+          <span className="text-[10px] sm:text-xs text-slate-500 font-medium">© {new Date().getFullYear()} Günay Çağrı Tuzak</span>
         </div> 
         <div className="flex items-center space-x-2 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700"> 
           <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-green-500 animate-pulse"></div> 
@@ -207,9 +208,6 @@ export const SystemFlow: React.FC<DashboardProps> = ({
         /> 
       </div> 
 
-      <div className="mt-6 text-center text-[11px] sm:text-xs text-slate-500">
-        © {new Date().getFullYear()} Günay Çağrı Tuzak
-      </div>
     </div> 
   ); 
 };
