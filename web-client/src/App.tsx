@@ -101,45 +101,36 @@ function App() {
   useEffect(() => {
     if (!session) return
 
-    const chartTimeZone = 'Europe/Istanbul'
-    const getZonedParts = (date: Date, timeZone: string) => {
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-      }).formatToParts(date)
-
-      const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
-      const year = Number(get('year'))
-      const month = Number(get('month'))
-      const day = Number(get('day'))
-      const hour = Number(get('hour'))
-      const minute = Number(get('minute'))
-      return { year, month, day, hour, minute }
+    const trOffsetMs = 3 * 60 * 60 * 1000
+    const toTrDateFromIso = (iso: string) => new Date(new Date(iso).getTime() + trOffsetMs)
+    const toTrNow = () => new Date(Date.now() + trOffsetMs)
+    const getTrParts = (trShiftedDate: Date) => {
+      const year = trShiftedDate.getUTCFullYear()
+      const month = trShiftedDate.getUTCMonth() + 1
+      const day = trShiftedDate.getUTCDate()
+      const hour = trShiftedDate.getUTCHours()
+      return { year, month, day, hour }
     }
 
-    const getDayKeyInTz = (date: Date, timeZone: string) => {
-      const p = getZonedParts(date, timeZone)
+    const getTrDayKey = (trShiftedDate: Date) => {
+      const p = getTrParts(trShiftedDate)
       return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
     }
 
-    const getHourBucketInTz = (createdAt: string, timeZone: string) => {
-      const p = getZonedParts(new Date(createdAt), timeZone)
-      return { dayKey: `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`, hour: p.hour }
+    const getTrHourBucket = (createdAt: string) => {
+      const tr = toTrDateFromIso(createdAt)
+      const p = getTrParts(tr)
+      return { dayKey: getTrDayKey(tr), hour: p.hour }
     }
 
     const formatHourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
     const fillHourlyBuckets = (
       points: Array<{ bucket: number; time: string; voltage?: number; solar?: number }>,
-      now: Date
+      trNow: Date
     ) => {
-      const todayKey = getDayKeyInTz(now, chartTimeZone)
-      const currentHour = getZonedParts(now, chartTimeZone).hour
+      const todayKey = getTrDayKey(trNow)
+      const currentHour = getTrParts(trNow).hour
       const byBucket = new Map<number, { bucket: number; time: string; voltage?: number; solar?: number }>()
       points.forEach((p) => byBucket.set(p.bucket, p))
       const filled: Array<{ bucket: number; time: string; voltage?: number; solar?: number }> = []
@@ -155,11 +146,11 @@ function App() {
 
     const buildHistoryData = (rows: Array<{ created_at: string; voltage: number | null; pv_power: number | null; device_type: number | null }>) => {
       const byBucket = new Map<number, { bucket: number; time: string; voltage?: number; solar?: number; _hasBatteryVoltage?: boolean }>()
-      const now = new Date()
-      const { todayKey } = fillHourlyBuckets([], now)
+      const trNow = toTrNow()
+      const { todayKey } = fillHourlyBuckets([], trNow)
 
       rows.forEach((r) => {
-        const { dayKey, hour } = getHourBucketInTz(r.created_at, chartTimeZone)
+        const { dayKey, hour } = getTrHourBucket(r.created_at)
         if (dayKey !== todayKey) return
         const existing = byBucket.get(hour) ?? { bucket: hour, time: formatHourLabel(hour) }
 
@@ -182,7 +173,7 @@ function App() {
       })
 
       const points = Array.from(byBucket.values()).sort((a, b) => a.bucket - b.bucket)
-      const { filled } = fillHourlyBuckets(points, now)
+      const { filled } = fillHourlyBuckets(points, trNow)
       return filled
     }
 
@@ -192,9 +183,9 @@ function App() {
     ) => {
       if (newRow.device_type !== 1 && newRow.device_type !== 2) return prev
 
-      const { dayKey, hour } = getHourBucketInTz(newRow.created_at, chartTimeZone)
-      const now = new Date()
-      const { todayKey } = fillHourlyBuckets([], now)
+      const { dayKey, hour } = getTrHourBucket(newRow.created_at)
+      const trNow = toTrNow()
+      const { todayKey } = fillHourlyBuckets([], trNow)
       if (dayKey !== todayKey) return prev
       const idx = prev.findIndex((p) => p.bucket === hour)
 
@@ -212,7 +203,7 @@ function App() {
         }
 
         const merged = [...prev, nextPoint].sort((a, b) => a.bucket - b.bucket)
-        const { filled } = fillHourlyBuckets(merged, now)
+        const { filled } = fillHourlyBuckets(merged, trNow)
         return filled
       }
 
@@ -229,7 +220,7 @@ function App() {
       const next = [...prev]
       next[idx] = updated
       const merged = next.sort((a, b) => a.bucket - b.bucket)
-      const { filled } = fillHourlyBuckets(merged, now)
+      const { filled } = fillHourlyBuckets(merged, trNow)
       return filled
     }
 
