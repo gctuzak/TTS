@@ -11,7 +11,7 @@ export interface DashboardProps {
 } 
 
 // Enerji akışını çizen ve canlandıran alt bileşen 
-const FlowLine = ({ x1, y1, x2, y2, power, color }: any) => { 
+const FlowLine: React.FC<{ x1: string; y1: string; x2: string; y2: string; power: number; color: string }> = ({ x1, y1, x2, y2, power, color }) => { 
   const isFlowing = power !== 0; 
   // Güç pozitifse düz (normal), negatifse ters (reverse) yönde akar 
   const direction = power > 0 ? 1 : -1; 
@@ -56,7 +56,7 @@ const FlowLine = ({ x1, y1, x2, y2, power, color }: any) => {
 }; 
 
 // Alt kısımdaki istatistik kartları için alt bileşen 
-const StatCard = ({ title, value, icon, valueColor = "text-white" }: any) => ( 
+const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; valueColor?: string }> = ({ title, value, icon, valueColor = "text-white" }) => ( 
   <div className="flex items-center p-3 sm:p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-sm hover:bg-slate-700/50 transition-colors"> 
     <div className="flex shrink-0 items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-900/80 mr-3 sm:mr-4 border border-slate-700"> 
       {icon} 
@@ -113,7 +113,7 @@ export const SystemFlow: React.FC<DashboardProps> = ({
       {/* --- ÜST KISIM: Başlık ve Durum --- */} 
       <div className="flex justify-between items-center mb-6 sm:mb-8 pb-4 border-b border-slate-800"> 
         <div className="flex items-center space-x-3"> 
-          <h1 className="text-xl sm:text-2xl font-bold tracking-wider text-slate-100">CERBO GX</h1> 
+          <h1 className="text-xl sm:text-2xl font-bold tracking-wider text-slate-100">CACIKİ GX</h1> 
         </div> 
         <div className="flex items-center space-x-2 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700"> 
           <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-green-500 animate-pulse"></div> 
@@ -206,6 +206,10 @@ export const SystemFlow: React.FC<DashboardProps> = ({
           valueColor="text-white" 
         /> 
       </div> 
+
+      <div className="mt-6 text-center text-[11px] sm:text-xs text-slate-500">
+        © {new Date().getFullYear()} Günay Çağrı Tuzak
+      </div>
     </div> 
   ); 
 };

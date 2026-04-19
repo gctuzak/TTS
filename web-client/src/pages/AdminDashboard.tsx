@@ -3,70 +3,116 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { LogOut, Users, Anchor } from 'lucide-react'
 
+type ProfileRow = {
+  id: string
+  email: string | null
+  full_name: string | null
+  role: string | null
+  created_at?: string
+}
+
+type BoatRow = {
+  id: string
+  name: string
+  device_secret: string
+  profiles?: {
+    full_name: string | null
+    email: string | null
+  }
+}
+
 export default function AdminDashboard() {
   const [, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [users, setUsers] = useState<any[]>([])
-  const [boats, setBoats] = useState<any[]>([])
+  const [users, setUsers] = useState<ProfileRow[]>([])
+  const [boats, setBoats] = useState<BoatRow[]>([])
   const navigate = useNavigate()
 
   useEffect(() => {
-    checkAdminStatus()
-  }, [])
+    let mounted = true
+    const run = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        if (mounted) navigate('/')
+        return
+      }
 
-  const checkAdminStatus = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      navigate('/')
-      return
-    }
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
 
-    // Kullanıcı profilinden rolü kontrol et
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
+      if (error || profile?.role !== 'admin') {
+        alert('Bu sayfayı görüntüleme yetkiniz yok.')
+        if (mounted) navigate('/')
+        return
+      }
 
-    if (error || profile?.role !== 'admin') {
-      // Admin değilse anasayfaya at
-      alert('Bu sayfayı görüntüleme yetkiniz yok.')
-      navigate('/')
-      return
-    }
+      if (mounted) setIsAdmin(true)
 
-    setIsAdmin(true)
-    fetchData()
-  }
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-  const fetchData = async () => {
-    // Tüm profilleri çek (Bunu zaten çekebiliyor olmanız lazım, eğer RLS engellemiyorsa)
-    const { data: profilesData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
-    
-    // Tekneleri güvenli RPC üzerinden çek (RLS'yi by-pass eden admin fonksiyonu)
-    const { data: boatsData, error: rpcError } = await supabase.rpc('get_all_boats_for_admin')
-    
-    if (rpcError) {
-      console.error("Admin yetkisiyle tekneler çekilemedi. SQL fonksiyonu eklenmemiş olabilir.", rpcError)
-      // Fallback (Eğer RPC yoksa düz tablodan çekmeyi dene)
-      const { data: fallbackBoats } = await supabase.from('boats').select('*, profiles(email, full_name)').order('created_at', { ascending: false })
-      if (fallbackBoats) setBoats(fallbackBoats)
-    } else if (boatsData) {
-      // RPC'den gelen veriyi React state'ine uygun formata dönüştür
-      const formattedBoats = boatsData.map((b: any) => ({
-        ...b,
-        profiles: {
-          full_name: b.owner_name,
-          email: b.owner_email
+      if (profilesData && mounted) setUsers(profilesData as ProfileRow[])
+
+      const { data: boatsData, error: rpcError } = await supabase.rpc('get_all_boats_for_admin')
+      if (rpcError) {
+        const { data: fallbackBoats } = await supabase
+          .from('boats')
+          .select('id, name, device_secret, profiles(email, full_name)')
+          .order('created_at', { ascending: false })
+
+        if (fallbackBoats && mounted) {
+          const formatted: BoatRow[] = (fallbackBoats as Record<string, unknown>[]).map((b) => {
+            const id = typeof b.id === 'string' ? b.id : ''
+            const name = typeof b.name === 'string' ? b.name : ''
+            const device_secret = typeof b.device_secret === 'string' ? b.device_secret : ''
+            const profilesRaw = (b as { profiles?: unknown }).profiles
+            const profile0 =
+              Array.isArray(profilesRaw) ? profilesRaw[0] :
+              (profilesRaw && typeof profilesRaw === 'object' ? profilesRaw : null)
+            const full_name = profile0 && typeof profile0 === 'object' && 'full_name' in profile0 ? (profile0 as { full_name?: unknown }).full_name : null
+            const email = profile0 && typeof profile0 === 'object' && 'email' in profile0 ? (profile0 as { email?: unknown }).email : null
+            return {
+              id,
+              name,
+              device_secret,
+              profiles: {
+                full_name: typeof full_name === 'string' ? full_name : null,
+                email: typeof email === 'string' ? email : null,
+              },
+            }
+          })
+          setBoats(formatted)
         }
-      }))
-      setBoats(formattedBoats)
+      } else if (boatsData) {
+        const formatted: BoatRow[] = (boatsData as Record<string, unknown>[]).map((b) => {
+          const id = typeof b.id === 'string' ? b.id : ''
+          const name = typeof b.name === 'string' ? b.name : ''
+          const device_secret = typeof b.device_secret === 'string' ? b.device_secret : ''
+          const ownerName = typeof b.owner_name === 'string' ? b.owner_name : null
+          const ownerEmail = typeof b.owner_email === 'string' ? b.owner_email : null
+          return {
+            id,
+            name,
+            device_secret,
+            profiles: { full_name: ownerName, email: ownerEmail },
+          }
+        })
+        if (mounted) setBoats(formatted)
+      }
+
+      if (mounted) setLoading(false)
     }
-    
-    if (profilesData) setUsers(profilesData)
-    
-    setLoading(false)
-  }
+
+    void run()
+    return () => {
+      mounted = false
+    }
+  }, [navigate])
 
   if (loading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Yükleniyor...</div>
 

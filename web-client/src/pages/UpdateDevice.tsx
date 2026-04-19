@@ -9,6 +9,13 @@ export default function UpdateDevice() {
   const [progress, setProgress] = useState(0)
   const [logs, setLogs] = useState<string[]>([])
   const navigate = useNavigate()
+  const getErrorMessage = (err: unknown) => {
+    if (err && typeof err === 'object' && 'message' in err) {
+      const msg = (err as { message?: unknown }).message
+      if (typeof msg === 'string') return msg
+    }
+    return String(err ?? 'Bilinmeyen hata')
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -94,24 +101,24 @@ export default function UpdateDevice() {
             if (written === total) logMsg(`Dosya ${fileIndex + 1}/3 başarıyla yazıldı.`)
           }
         })
-      } catch (err: any) {
-        throw new Error('Firmware dosyaları eksik. Lütfen sistem yöneticisi ile görüşün. (' + err.message + ')')
+      } catch (err: unknown) {
+        throw new Error('Firmware dosyaları eksik. Lütfen sistem yöneticisi ile görüşün. (' + getErrorMessage(err) + ')')
       }
 
       logMsg('Yazılım başarıyla atıldı! Lütfen cihazı manuel olarak resetleyin (USB kablosunu tak-çıkar yapabilirsiniz).')
         
       try {
-        // @ts-ignore - esptool-js tiplerinde eksik olabilir
-        if (loader.hardReset) await loader.hardReset()
-      } catch (resetErr) {
-        // Reset desteklenmiyorsa önemli değil, yazılım zaten atıldı
+        const maybeLoader = loader as unknown as { hardReset?: () => Promise<void> | void }
+        if (typeof maybeLoader.hardReset === 'function') await maybeLoader.hardReset()
+      } catch {
+        logMsg('Cihaz reset komutu desteklenmiyor, manuel reset gerekli olabilir.')
       }
       
       await transport.disconnect()
       setStatus('success')
 
-    } catch (err: any) {
-      logMsg('HATA: ' + err.message)
+    } catch (err: unknown) {
+      logMsg('HATA: ' + getErrorMessage(err))
       setStatus('error')
     }
   }

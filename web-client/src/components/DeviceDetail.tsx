@@ -115,8 +115,6 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
 
   useEffect(() => {
     if (!isSolar || !device.boat_id || !device.mac_address) {
-      setDailyHistory([]);
-      setSelectedDayKey(null);
       return;
     }
 
@@ -378,7 +376,12 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
                         <Bar
                           dataKey="yield"
                           radius={[6, 6, 0, 0]}
-                          onClick={(barData: any) => setSelectedDayKey(barData?.dayKey ?? null)}
+                          onClick={(barData: unknown) => {
+                            const dayKey = (barData && typeof barData === 'object' && 'dayKey' in barData)
+                              ? (barData as { dayKey?: unknown }).dayKey
+                              : null
+                            setSelectedDayKey(typeof dayKey === 'string' ? dayKey : null)
+                          }}
                           cursor="pointer"
                         >
                           {displayDays.map((entry) => (

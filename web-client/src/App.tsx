@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
+import type { Session } from '@supabase/supabase-js'
 import { Auth } from './components/Auth'
 import { SystemFlow } from './components/SystemFlow'
 import { HistoryCharts } from './components/HistoryCharts'
@@ -46,7 +47,7 @@ interface Boat {
 }
 
 function App() {
-  const [session, setSession] = useState<any>(null)
+  const [session, setSession] = useState<Session | null>(null)
   const [boat, setBoat] = useState<Boat | null>(null)
   const [loading, setLoading] = useState(true)
   const [needsClaim, setNeedsClaim] = useState(false)
@@ -70,6 +71,14 @@ function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
+      if (!session) {
+        setBoat(null)
+        setDeviceMap({})
+        setHistoryData([])
+        setMaxDataMap({})
+        setNeedsClaim(false)
+        setIsAdmin(false)
+      }
       setLoading(false)
     })
 
@@ -77,6 +86,12 @@ function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
+      setBoat(null)
+      setDeviceMap({})
+      setHistoryData([])
+      setMaxDataMap({})
+      setNeedsClaim(false)
+      setIsAdmin(false)
     })
 
     return () => subscription.unsubscribe()
@@ -84,44 +99,91 @@ function App() {
 
   // Tekne bilgisini çek ve Realtime başlat
   useEffect(() => {
-    if (!session) {
-      setBoat(null)
-      setDeviceMap({})
-      setNeedsClaim(false) // Oturum yoksa claim ekranı gösterme
-      return
+    if (!session) return
+
+    const chartTimeZone = 'Europe/Istanbul'
+    const getZonedParts = (date: Date, timeZone: string) => {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(date)
+
+      const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+      const year = Number(get('year'))
+      const month = Number(get('month'))
+      const day = Number(get('day'))
+      const hour = Number(get('hour'))
+      const minute = Number(get('minute'))
+      return { year, month, day, hour, minute }
     }
 
-    const getBucketMs = (createdAt: string) => {
-      const d = new Date(createdAt)
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()).getTime()
+    const getDayKeyInTz = (date: Date, timeZone: string) => {
+      const p = getZonedParts(date, timeZone)
+      return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
     }
 
-    const formatBucketLabel = (bucketMs: number) =>
-      new Date(bucketMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const getHourBucketInTz = (createdAt: string, timeZone: string) => {
+      const p = getZonedParts(new Date(createdAt), timeZone)
+      return { dayKey: `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`, hour: p.hour }
+    }
 
-    const buildHistoryData = (rows: Array<{ created_at: string; voltage: any; pv_power: any; device_type: any }>) => {
+    const formatHourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
+
+    const fillHourlyBuckets = (
+      points: Array<{ bucket: number; time: string; voltage?: number; solar?: number }>,
+      now: Date
+    ) => {
+      const todayKey = getDayKeyInTz(now, chartTimeZone)
+      const currentHour = getZonedParts(now, chartTimeZone).hour
       const byBucket = new Map<number, { bucket: number; time: string; voltage?: number; solar?: number }>()
+      points.forEach((p) => byBucket.set(p.bucket, p))
+      const filled: Array<{ bucket: number; time: string; voltage?: number; solar?: number }> = []
+      for (let h = 0; h <= currentHour; h += 1) {
+        filled.push(byBucket.get(h) ?? { bucket: h, time: formatHourLabel(h) })
+      }
+      if (filled.length > 0) {
+        const last = filled[filled.length - 1]
+        filled[filled.length - 1] = { ...last, time: last.time, bucket: last.bucket }
+      }
+      return { todayKey, filled: filled.slice(-24) }
+    }
+
+    const buildHistoryData = (rows: Array<{ created_at: string; voltage: number | null; pv_power: number | null; device_type: number | null }>) => {
+      const byBucket = new Map<number, { bucket: number; time: string; voltage?: number; solar?: number; _hasBatteryVoltage?: boolean }>()
+      const now = new Date()
+      const { todayKey } = fillHourlyBuckets([], now)
 
       rows.forEach((r) => {
-        const bucket = getBucketMs(r.created_at)
-        const existing = byBucket.get(bucket) ?? { bucket, time: formatBucketLabel(bucket) }
+        const { dayKey, hour } = getHourBucketInTz(r.created_at, chartTimeZone)
+        if (dayKey !== todayKey) return
+        const existing = byBucket.get(hour) ?? { bucket: hour, time: formatHourLabel(hour) }
 
-        if (r.device_type === 2) {
-          if (existing.voltage === undefined && r.voltage !== null && r.voltage !== undefined) {
-            existing.voltage = Number(r.voltage)
-          }
-        } else if (r.device_type === 1) {
-          if (existing.solar === undefined && r.pv_power !== null && r.pv_power !== undefined) {
-            existing.solar = Number(r.pv_power)
+        if (r.pv_power !== null && r.pv_power !== undefined && !isNaN(Number(r.pv_power))) {
+          const val = Number(r.pv_power)
+          existing.solar = existing.solar === undefined ? val : Math.max(existing.solar, val)
+        }
+
+        if (r.voltage !== null && r.voltage !== undefined && !isNaN(Number(r.voltage))) {
+          const val = Number(r.voltage)
+          if (r.device_type === 2) {
+            existing.voltage = val
+            existing._hasBatteryVoltage = true
+          } else if (!existing._hasBatteryVoltage && existing.voltage === undefined) {
+            existing.voltage = val
           }
         }
 
-        byBucket.set(bucket, existing)
+        byBucket.set(hour, existing)
       })
 
-      return Array.from(byBucket.values())
-        .sort((a, b) => a.bucket - b.bucket)
-        .slice(-24)
+      const points = Array.from(byBucket.values()).sort((a, b) => a.bucket - b.bucket)
+      const { filled } = fillHourlyBuckets(points, now)
+      return filled
     }
 
     const upsertHistoryPoint = (
@@ -130,29 +192,34 @@ function App() {
     ) => {
       if (newRow.device_type !== 1 && newRow.device_type !== 2) return prev
 
-      const bucket = getBucketMs(newRow.created_at)
-      const idx = prev.findIndex((p) => p.bucket === bucket)
+      const { dayKey, hour } = getHourBucketInTz(newRow.created_at, chartTimeZone)
+      const now = new Date()
+      const { todayKey } = fillHourlyBuckets([], now)
+      if (dayKey !== todayKey) return prev
+      const idx = prev.findIndex((p) => p.bucket === hour)
 
       if (idx === -1) {
         const nextPoint: { bucket: number; time: string; voltage?: number; solar?: number } = {
-          bucket,
-          time: formatBucketLabel(bucket),
+          bucket: hour,
+          time: formatHourLabel(hour),
         }
 
-        if (newRow.device_type === 2 && newRow.voltage !== null && newRow.voltage !== undefined) {
+        if (newRow.voltage !== null && newRow.voltage !== undefined && !isNaN(Number(newRow.voltage))) {
           nextPoint.voltage = Number(newRow.voltage)
         }
         if (newRow.device_type === 1 && newRow.pv_power !== null && newRow.pv_power !== undefined) {
           nextPoint.solar = Number(newRow.pv_power)
         }
 
-        return [...prev, nextPoint].sort((a, b) => a.bucket - b.bucket).slice(-24)
+        const merged = [...prev, nextPoint].sort((a, b) => a.bucket - b.bucket)
+        const { filled } = fillHourlyBuckets(merged, now)
+        return filled
       }
 
       const existing = prev[idx]
       const updated = { ...existing }
 
-      if (newRow.device_type === 2 && newRow.voltage !== null && newRow.voltage !== undefined) {
+      if (newRow.voltage !== null && newRow.voltage !== undefined && !isNaN(Number(newRow.voltage))) {
         updated.voltage = Number(newRow.voltage)
       }
       if (newRow.device_type === 1 && newRow.pv_power !== null && newRow.pv_power !== undefined) {
@@ -161,7 +228,9 @@ function App() {
 
       const next = [...prev]
       next[idx] = updated
-      return next.sort((a, b) => a.bucket - b.bucket).slice(-24)
+      const merged = next.sort((a, b) => a.bucket - b.bucket)
+      const { filled } = fillHourlyBuckets(merged, now)
+      return filled
     }
 
     const fetchBoat = async () => {
@@ -177,7 +246,7 @@ function App() {
       }
 
       // 1. Sadece giriş yapan kullanıcıya (session.user.id) ait en son yüklenen tekneyi bul
-        let { data, error } = await supabase
+        const { data, error } = await supabase
           .from('boats')
           .select('*')
           .eq('user_id', session.user.id) // DEĞİŞİKLİK: Sadece bu kullanıcının tekneleri
@@ -222,26 +291,40 @@ function App() {
         
         if (rpcError) {
            console.warn("RPC fonksiyonu okunamadı:", rpcError.message)
-        } else if (maxValues) {
+        } else if (Array.isArray(maxValues)) {
           const tempMaxMap: Record<string, { pmax: number, vmax: number }> = {}
-          maxValues.forEach((row: any) => {
-            if (row.mac_address) {
-              tempMaxMap[row.mac_address] = { pmax: row.pmax, vmax: row.vmax }
+          maxValues.forEach((row) => {
+            if (!row || typeof row !== 'object') return
+            const mac = (row as { mac_address?: unknown }).mac_address
+            const pmax = (row as { pmax?: unknown }).pmax
+            const vmax = (row as { vmax?: unknown }).vmax
+            if (typeof mac === 'string') {
+              tempMaxMap[mac] = { pmax: Number(pmax ?? 0), vmax: Number(vmax ?? 0) }
             }
           })
           setMaxDataMap(tempMaxMap)
         }
 
-        // 4. Grafikler İçin Geçmiş 24 Saatlik Veriyi Çek (Her saat başı 1 veri veya son 30 veri)
+        // 4. Grafikler İçin Bulunulan Günün Verisini Çek (Saatlik bucket ile son 24 nokta)
+        const startOfDay = new Date()
+        startOfDay.setHours(0, 0, 0, 0)
+        const startOfTomorrow = new Date(startOfDay)
+        startOfTomorrow.setDate(startOfTomorrow.getDate() + 1)
+
         const { data: historyRes } = await supabase
           .from('telemetry')
           .select('created_at, voltage, pv_power, device_type')
           .eq('boat_id', data.id)
-          .order('created_at', { ascending: false })
-          .limit(100) // Son 100 kaydı alıp birleştirelim
+          .gte('created_at', startOfDay.toISOString())
+          .lt('created_at', startOfTomorrow.toISOString())
+          .in('device_type', [1, 2])
+          .order('created_at', { ascending: true })
+          .limit(2000)
         
         if (historyRes && historyRes.length > 0) {
           setHistoryData(buildHistoryData(historyRes))
+        } else {
+          setHistoryData([])
         }
 
         // Realtime Abonelik
@@ -335,6 +418,7 @@ function App() {
   const handleRegisterBoat = async (e: React.FormEvent) => {
     e.preventDefault()
     setClaimError("")
+    if (!session) return
 
     if (!boatNameInput || boatNameInput.trim().length < 3) {
       setClaimError("Lütfen teknenizin adını en az 3 karakter olacak şekilde girin.")
@@ -419,102 +503,94 @@ function App() {
     )
   }
 
-  // Hata yakalama için basit bir kontrol (Normalde ErrorBoundary kullanılır)
-  try {
-    if (!boat) {
-      return (
-        <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white p-4">
-          <h1 className="text-2xl mb-4">Tekne Bilgisi Yükleniyor...</h1>
-          <p className="text-gray-400">Veritabanı bağlantısı kuruluyor.</p>
-        </div>
-      )
-    }
-
+  if (!boat) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white p-4 md:p-8 font-sans">
-        <header className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-              {boat.name}
-            </h1>
-            <p className="text-gray-400 text-sm mt-1">Tekne Telemetri Sistemi</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-              </span>
-              Canlı
-            </div>
-            <button
-              onClick={() => navigate('/update')}
-              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-400 hover:bg-blue-600/40 transition-colors text-sm"
-              title="Cihaz Yazılımı Güncelle"
-            >
-              <DownloadCloud size={16} /> Cihaz Güncelle
-            </button>
-            {isAdmin && (
-              <button
-                onClick={() => navigate('/admin')}
-                className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-400 hover:bg-purple-600/40 transition-colors text-sm"
-                title="Admin Paneli"
-              >
-                <Settings size={16} /> Admin
-              </button>
-            )}
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
-              title="Çıkış Yap"
-            >
-              <LogOut size={20} />
-            </button>
-          </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto space-y-8">
-          {/* Üst Kısım: Akış Şeması ve İstatistik Kartları (Cerbo GX Görünümü) */}
-          <section>
-            <SystemFlow
-              pvPower={dashboardData.pvPower}
-              batteryPower={dashboardData.batteryPower}
-              loadPower={dashboardData.loadPower}
-              voltage={dashboardData.voltage}
-              soc={dashboardData.soc}
-              remaining={dashboardData.remaining}
-            />
-          </section>
-
-          {/* Orta Kısım: Grafikler */}
-          <section>
-            <HistoryCharts data={historyData} />
-          </section>
-
-          {/* Cihaz Detayları */}
-          <section>
-            <h2 className="text-xl font-bold mb-4 text-gray-300">Cihaz Detayları</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Object.values(deviceMap).map((device) => {
-                const maxes = device.mac_address ? maxDataMap[device.mac_address] : null
-                return (
-                  <DeviceDetail
-                    key={device.mac_address || device.id}
-                    device={device}
-                    pmax={maxes?.pmax ?? null}
-                    vmax={maxes?.vmax ?? null}
-                    name={device.device_type === 1 ? 'Solar Charger' : (device.device_type === 2 ? 'Battery Monitor' : device.mac_address || 'Cihaz')}
-                  />
-                )
-              })}
-            </div>
-          </section>
-        </main>
+      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white p-4">
+        <h1 className="text-2xl mb-4">Tekne Bilgisi Yükleniyor...</h1>
+        <p className="text-gray-400">Veritabanı bağlantısı kuruluyor.</p>
       </div>
     )
-  } catch (err) {
-    return <div className="p-4 text-red-500">Bir hata oluştu: {String(err)}</div>
   }
+
+  return (
+    <div className="min-h-screen bg-gray-950 text-white p-4 md:p-8 font-sans">
+      <header className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+            {boat.name}
+          </h1>
+          <p className="text-gray-400 text-sm mt-1">Tekne Telemetri Sistemi</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            </span>
+            Canlı
+          </div>
+          <button
+            onClick={() => navigate('/update')}
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-400 hover:bg-blue-600/40 transition-colors text-sm"
+            title="Cihaz Yazılımı Güncelle"
+          >
+            <DownloadCloud size={16} /> Cihaz Güncelle
+          </button>
+          {isAdmin && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-400 hover:bg-purple-600/40 transition-colors text-sm"
+              title="Admin Paneli"
+            >
+              <Settings size={16} /> Admin
+            </button>
+          )}
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
+            title="Çıkış Yap"
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto space-y-8">
+        <section>
+          <SystemFlow
+            pvPower={dashboardData.pvPower}
+            batteryPower={dashboardData.batteryPower}
+            loadPower={dashboardData.loadPower}
+            voltage={dashboardData.voltage}
+            soc={dashboardData.soc}
+            remaining={dashboardData.remaining}
+          />
+        </section>
+
+        <section>
+          <HistoryCharts data={historyData} />
+        </section>
+
+        <section>
+          <h2 className="text-xl font-bold mb-4 text-gray-300">Cihaz Detayları</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Object.values(deviceMap).map((device) => {
+              const maxes = device.mac_address ? maxDataMap[device.mac_address] : null
+              return (
+                <DeviceDetail
+                  key={device.mac_address || device.id}
+                  device={device}
+                  pmax={maxes?.pmax ?? null}
+                  vmax={maxes?.vmax ?? null}
+                  name={device.device_type === 1 ? 'Solar Charger' : (device.device_type === 2 ? 'Battery Monitor' : device.mac_address || 'Cihaz')}
+                />
+              )
+            })}
+          </div>
+        </section>
+      </main>
+    </div>
+  )
 }
 
 export default App

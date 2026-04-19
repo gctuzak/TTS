@@ -7,6 +7,13 @@ export const Auth = () => {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [message, setMessage] = useState('');
+  const getErrorMessage = (err: unknown) => {
+    if (err && typeof err === 'object' && 'message' in err) {
+      const msg = (err as { message?: unknown }).message
+      if (typeof msg === 'string') return msg
+    }
+    return 'Bilinmeyen hata'
+  }
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,8 +35,8 @@ export const Auth = () => {
         });
         if (error) throw error;
       }
-    } catch (error: any) {
-      setMessage(error.message);
+    } catch (error: unknown) {
+      setMessage(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
