@@ -140,13 +140,13 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
                 <DetailRow icon={<Battery size={18} />} label="Voltaj" value={fmt(device.voltage, 'V')} />
                 <DetailRow icon={<Activity size={18} />} label="Akım" value={fmt(device.current, 'A')} />
                 <DetailRow icon={<Activity size={18} />} label="Durum" value={chargeStateLabel} />
-                <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Virtüel yük çıkışı</div>
-                <DetailRow
-                  icon={<Activity size={18} />}
-                  label="Durum"
-                  value={loadCurrentUnknown ? '--' : device.load_state === 1 ? 'Açık' : 'Kapalı'}
-                />
-                <DetailRow icon={<Zap size={18} />} label="Akım" value={fmt(loadCurrentUnknown ? null : loadCurrentNumber, 'A')} />
+                {!loadCurrentUnknown && (
+                  <>
+                    <div className="px-4 py-1 text-xs opacity-60 mt-2 uppercase">Virtüel yük çıkışı</div>
+                    <DetailRow icon={<Activity size={18} />} label="Durum" value={device.load_state === 1 ? 'Açık' : 'Kapalı'} />
+                    <DetailRow icon={<Zap size={18} />} label="Akım" value={fmt(loadCurrentNumber, 'A')} />
+                  </>
+                )}
               </>
             )}
             <div className="h-4"></div>
