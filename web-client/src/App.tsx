@@ -404,9 +404,17 @@ function App() {
 
     // Son Veri Zamanı
     let lastUpdated: string | null = null
-    const latestRow = Object.values(deviceMap).sort((a, b) => 
-      new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-    )[0]
+    const now = new Date()
+    const latestRow = Object.values(deviceMap)
+      .filter(d => {
+        if (!d.created_at) return false
+        const dDate = new Date(d.created_at)
+        // Gelecek tarihli verileri filtrele (5 dakikadan fazla gelecekse hatalıdır)
+        return dDate.getTime() <= now.getTime() + 5 * 60 * 1000
+      })
+      .sort((a, b) => 
+        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      )[0]
     
     if (latestRow?.created_at) {
       const date = new Date(latestRow.created_at)

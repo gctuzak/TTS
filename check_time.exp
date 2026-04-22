@@ -1,0 +1,6 @@
+#!/usr/bin/expect -f
+set timeout 10
+spawn ssh -o StrictHostKeyChecking=no root@n8n.gergitavan.tr "date; date -u"
+expect "password:"
+send "@G13c11T73\r"
+expect eof
