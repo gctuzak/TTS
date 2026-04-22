@@ -402,13 +402,34 @@ function App() {
     // Yük Hesabı: (Solar Üretim) - (Aküye Giden) = Yük
     loadPower = Math.max(0, totalPvPower - batteryPower)
 
+    // Son Veri Zamanı
+    let lastUpdated: string | null = null
+    const latestRow = Object.values(deviceMap).sort((a, b) => 
+      new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    )[0]
+    
+    if (latestRow?.created_at) {
+      const date = new Date(latestRow.created_at)
+      // Türkiye saati (UTC+3)
+      lastUpdated = new Intl.DateTimeFormat('tr-TR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'Europe/Istanbul'
+      }).format(date)
+    }
+
     return {
       pvPower: totalPvPower,
       batteryPower,
       loadPower,
       voltage: batteryVoltage,
       soc: batterySoc,
-      remaining
+      remaining,
+      lastUpdated
     }
   }, [deviceMap])
 
@@ -528,7 +549,14 @@ function App() {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
             {boat.name}
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Tekne Telemetri Sistemi</p>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-1">
+            <p className="text-gray-600 dark:text-gray-400 text-sm">Tekne Telemetri Sistemi</p>
+            {dashboardData.lastUpdated && (
+              <p className="text-xs text-gray-500 dark:text-gray-500 italic">
+                (Son Veri: {dashboardData.lastUpdated})
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-sm">

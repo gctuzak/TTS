@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LogOut, Users, Anchor } from 'lucide-react'
+import { LogOut, Users, Anchor, Key } from 'lucide-react'
 
 type ProfileRow = {
   id: string
@@ -26,7 +26,29 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<ProfileRow[]>([])
   const [boats, setBoats] = useState<BoatRow[]>([])
+  const [updatingPassword, setUpdatingPassword] = useState<string | null>(null)
+  const [newPassword, setNewPassword] = useState('')
   const navigate = useNavigate()
+
+  const handleUpdatePassword = async (userId: string) => {
+    if (!newPassword || newPassword.length < 6) {
+      alert('Şifre en az 6 karakter olmalıdır.')
+      return
+    }
+
+    const { error } = await supabase.rpc('admin_update_user_password', {
+      target_user_id: userId,
+      new_password: newPassword
+    })
+
+    if (error) {
+      alert('Şifre güncellenirken hata oluştu: ' + error.message)
+    } else {
+      alert('Şifre başarıyla güncellendi.')
+      setUpdatingPassword(null)
+      setNewPassword('')
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -187,6 +209,7 @@ export default function AdminDashboard() {
                     <th className="px-4 py-3">İsim</th>
                     <th className="px-4 py-3">E-posta</th>
                     <th className="px-4 py-3">Rol</th>
+                    <th className="px-4 py-3">İşlemler</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -198,6 +221,41 @@ export default function AdminDashboard() {
                         <span className={`px-2 py-1 rounded text-xs ${user.role === 'admin' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}>
                           {user.role}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {updatingPassword === user.id ? (
+                          <div className="flex gap-2">
+                            <input
+                              type="password"
+                              placeholder="Yeni şifre"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className="px-2 py-1 text-xs rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700"
+                            />
+                            <button
+                              onClick={() => handleUpdatePassword(user.id)}
+                              className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                            >
+                              Kaydet
+                            </button>
+                            <button
+                              onClick={() => setUpdatingPassword(null)}
+                              className="px-2 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
+                            >
+                              İptal
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setUpdatingPassword(user.id)
+                              setNewPassword('')
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30"
+                          >
+                            <Key className="w-3 h-3" /> Şifre Değiştir
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
