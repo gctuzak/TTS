@@ -1,6 +1,0 @@
-#!/usr/bin/expect -f
-set timeout 10
-spawn ssh -o StrictHostKeyChecking=no root@n8n.gergitavan.tr "docker exec supabase-db-dk4wswk04owo840ow488wcg4 psql -U postgres -d postgres -c \"\\\\d telemetry\""
-expect "password:"
-send "@G13c11T73\r"
-expect eof
