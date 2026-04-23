@@ -167,12 +167,11 @@ void VictronBLE::parseDecryptedData(const uint8_t* data, size_t len, VictronData
         result.voltage = (float)getS16(2) / 100.0;
         // 4-5: Battery Current (s16, 0.1A)
         result.current = (float)getS16(4) / 10.0;
-        // 6-7: Yield Today (u16, 0.01 kWh -> 10Wh)
-        // Repo: vic_16bit_0_01_positive
-        result.yieldToday = (float)getU16(6) * 0.01;
+        // 6-7: PV Power (u16, 1W)
+        result.pvPower = (float)getU16(6);
         
-        // 8-9: PV Power (u16, 1W)
-        result.pvPower = (float)getU16(8);
+        // 8-9: Yield Today (u16, 10Wh units -> 0.01 kWh)
+        result.yieldToday = (float)getU16(8) * 0.01;
         
         // Verim Hesabı: (Battery Power / PV Power) * 100
         // Battery Power = Voltage * Current (Output)

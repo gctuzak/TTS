@@ -61,6 +61,22 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
   const isSolar = device.device_type === 1;
   const isBattery = device.device_type === 2;
 
+  // Türkiye saat dilimine göre "bugün" kontrolü
+  const isDataFromToday = useMemo(() => {
+    if (!device.created_at) return false;
+    const TR_OFFSET = 3 * 60 * 60 * 1000;
+    const toTrDate = (iso: string) => new Date(new Date(iso).getTime() + TR_OFFSET);
+    
+    const trNow = toTrDate(new Date().toISOString());
+    const trData = toTrDate(device.created_at);
+    
+    return trNow.getUTCFullYear() === trData.getUTCFullYear() &&
+           trNow.getUTCMonth() === trData.getUTCMonth() &&
+           trNow.getUTCDate() === trData.getUTCDate();
+  }, [device.created_at]);
+
+  const yieldTodayValue = isSolar && isDataFromToday ? device.yield_today : (isSolar ? 0 : null);
+
   // Format Helpers
   const fmt = (val: number | null | undefined, unit: string, decimals = 2) =>
     (val !== null && val !== undefined && !isNaN(val)) ? `${Number(val).toFixed(decimals)}${unit}` : '--';
@@ -137,6 +153,10 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
         return;
       }
 
+      // Türkiye saat dilimi düzeltmesi (UTC+3)
+      const TR_OFFSET = 3 * 60 * 60 * 1000;
+      const toTrDate = (iso: string) => new Date(new Date(iso).getTime() + TR_OFFSET);
+
       const byDay = new Map<
         string,
         {
@@ -156,12 +176,12 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
       >();
 
       data.forEach((row) => {
-        const d = new Date(row.created_at);
-        const ts = d.getTime();
-        const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const trDate = toTrDate(row.created_at);
+        const ts = trDate.getTime();
+        const dayKey = `${trDate.getUTCFullYear()}-${String(trDate.getUTCMonth() + 1).padStart(2, '0')}-${String(trDate.getUTCDate()).padStart(2, '0')}`;
         const existing = byDay.get(dayKey) ?? {
           dayKey,
-          dateObj: new Date(d.getFullYear(), d.getMonth(), d.getDate()),
+          dateObj: new Date(trDate.getUTCFullYear(), trDate.getUTCMonth(), trDate.getUTUTCDate()),
           yield: 0,
           pmax: 0,
           battMax: null,
@@ -208,8 +228,8 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
         byDay.set(dayKey, existing);
       });
 
-      const today = new Date();
-      const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const trNow = toTrDate(new Date().toISOString());
+      const todayKey = `${trNow.getUTCFullYear()}-${String(trNow.getUTCMonth() + 1).padStart(2, '0')}-${String(trNow.getUTCDate()).padStart(2, '0')}`;
       const normalized = Array.from(byDay.values())
         .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
         .map((d, idx, arr) => ({
@@ -447,7 +467,7 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
                 </div>
               </div>
 
-              <DetailRow icon={<Zap size={18} />} label="Bugünkü Üretim" value={fmt(device.yield_today, 'kWh')} />
+              <DetailRow icon={<Zap size={18} />} label="Bugünkü Üretim" value={fmt(yieldTodayValue, 'kWh')} />
               <DetailRow icon={<Power size={18} />} label="Toplam Üretim" value={fmt(device.total_yield, 'kWh')} />
               <DetailRow icon={<Activity size={18} />} label="Dönüşüm Verimi" value={fmt(device.efficiency, '%')} />
               <div className="px-4 py-3 bg-[#1976d2] text-sm font-semibold flex items-center gap-2 mt-4 border-t border-white/10">
