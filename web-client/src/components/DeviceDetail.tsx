@@ -181,7 +181,7 @@ export const DeviceDetail: React.FC<DeviceDetailProps> = ({ device, name, pmax, 
         const dayKey = `${trDate.getUTCFullYear()}-${String(trDate.getUTCMonth() + 1).padStart(2, '0')}-${String(trDate.getUTCDate()).padStart(2, '0')}`;
         const existing = byDay.get(dayKey) ?? {
           dayKey,
-          dateObj: new Date(trDate.getUTCFullYear(), trDate.getUTCMonth(), trDate.getUTUTCDate()),
+          dateObj: new Date(trDate.getUTCFullYear(), trDate.getUTCMonth(), trDate.getUTCDate()),
           yield: 0,
           pmax: 0,
           battMax: null,
