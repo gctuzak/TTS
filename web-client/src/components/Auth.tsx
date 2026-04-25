@@ -27,7 +27,7 @@ export const Auth = () => {
           password,
         });
         if (error) throw error;
-        setMessage('Kayıt başarılı! Lütfen e-postanızı doğrulayın veya giriş yapın.');
+        setMessage('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
