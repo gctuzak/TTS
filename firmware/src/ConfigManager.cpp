@@ -61,11 +61,10 @@ void saveConfig(String ssid, String pass, String boatId, String devicesJson) {
     preferences.end();
 }
 
-// Ayarları Sıfırla (WiFi Bilgilerini Sil)
+// Ayarları Sıfırla (WiFi ve Cihaz Bilgilerini Sil)
 void resetConfig() {
     preferences.begin("victron-app", false);
-    preferences.remove("ssid");
-    preferences.remove("pass");
+    preferences.clear(); // Tüm anahtarları sil (ssid, pass, boatId, devices)
     preferences.end();
     Serial.println("Ayarlar Sifirlandi!");
 }
