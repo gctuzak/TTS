@@ -691,20 +691,7 @@ void loop() {
                Serial.printf("Basili Sure: %lu ms\n", pressDuration);
           }
 
-          if (pressDuration > 10000) { // 10 saniye basılı tutulursa SIFIRLA
-              tft.fillScreen(TFT_RED);
-              tft.setTextColor(TFT_WHITE, TFT_RED);
-              tft.setTextSize(2);
-              tft.setCursor(10, 60);
-              tft.println("FABRIKA");
-              tft.setCursor(10, 90);
-              tft.println("AYARLARI...");
-              
-              Serial.println("!!! FABRIKA AYARLARINA DONULUYOR !!!");
-              resetConfig();
-              delay(2000);
-              ESP.restart();
-          } else if (pressDuration > 3000) { // 3 saniye basılı tutulursa AP MODU
+          if (pressDuration > 3000) {
               tft.fillScreen(TFT_BLUE);
               tft.setTextColor(TFT_WHITE, TFT_BLUE);
               tft.setTextSize(2);
