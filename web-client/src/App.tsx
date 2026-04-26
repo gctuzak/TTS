@@ -55,6 +55,7 @@ function App() {
   const [claimError, setClaimError] = useState("")
   const [debugLog, setDebugLog] = useState<string>("")
   const [isAdmin, setIsAdmin] = useState(false)
+  const [adminViewingBoatId, setAdminViewingBoatId] = useState<string | null>(null)
   const navigate = useNavigate()
 
   const [isDark, setIsDark] = useState(() => {
@@ -250,20 +251,34 @@ function App() {
         .eq('id', session.user.id)
         .single()
         
+      let isAdminUser = false;
       if (profile && profile.role === 'admin') {
+        isAdminUser = true;
         setIsAdmin(true)
       }
 
-      // 1. Sadece giriş yapan kullanıcıya (session.user.id) ait en son yüklenen tekneyi bul
-        const { data, error } = await supabase
-          .from('boats')
-          .select('*')
-          .eq('user_id', session.user.id) // DEĞİŞİKLİK: Sadece bu kullanıcının tekneleri
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+      // Admin ise URL'den gelen hedef tekne ID'sine bak
+      const searchParams = new URLSearchParams(window.location.search);
+      const targetBoatId = searchParams.get('boat_id');
 
-        if (error) {
+      let query = supabase.from('boats').select('*');
+
+      if (isAdminUser && targetBoatId) {
+        // Admin, spesifik bir tekneye girmek istiyor
+        query = query.eq('id', targetBoatId);
+        setAdminViewingBoatId(targetBoatId);
+      } else {
+        // Normal kullanıcı veya parametresiz giren admin: Sadece kendi teknesini gör
+        query = query.eq('user_id', session.user.id);
+        setAdminViewingBoatId(null);
+      }
+
+      const { data, error } = await query
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
           console.error('Tekne verisi çekilemedi:', error)
           setDebugLog("Boats hatası: " + error.message)
         }
@@ -554,8 +569,13 @@ function App() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-slate-900 dark:text-white p-4 md:p-8 font-sans">
       <header className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent flex items-center gap-2">
             {boat.name}
+            {adminViewingBoatId && (
+              <span className="text-xs bg-red-600/20 text-red-500 px-2 py-1 rounded border border-red-500/30 font-normal">
+                Admin Modu
+              </span>
+            )}
           </h1>
           <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-1">
             <p className="text-gray-600 dark:text-gray-400 text-sm">Tekne Telemetri Sistemi</p>
@@ -567,6 +587,17 @@ function App() {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {adminViewingBoatId && (
+            <button
+              onClick={() => {
+                window.location.href = '/admin'
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-600/20 border border-red-500/30 text-red-500 hover:bg-red-600/40 transition-colors text-sm font-medium"
+              title="Admin Paneline Dön"
+            >
+              Paneli Kapat
+            </button>
+          )}
           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>

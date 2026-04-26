@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LogOut, Users, Anchor, Key } from 'lucide-react'
+import { LogOut, Users, Anchor, Key, Eye } from 'lucide-react'
 
 type ProfileRow = {
   id: string
@@ -177,6 +177,7 @@ export default function AdminDashboard() {
                     <th className="px-4 py-3">Tekne Adı</th>
                     <th className="px-4 py-3">Sahibi</th>
                     <th className="px-4 py-3">Device Secret</th>
+                    <th className="px-4 py-3">İşlemler</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -185,10 +186,19 @@ export default function AdminDashboard() {
                       <td className="px-4 py-3 text-slate-900 dark:text-white font-medium">{boat.name}</td>
                       <td className="px-4 py-3">{boat.profiles?.full_name || boat.profiles?.email || 'Bilinmiyor'}</td>
                       <td className="px-4 py-3 font-mono text-xs text-yellow-400 bg-white dark:bg-gray-900/50 rounded">{boat.device_secret}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => { window.location.href = `/?boat_id=${boat.id}` }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-600/20 text-emerald-500 rounded hover:bg-emerald-600/30 transition"
+                          title="Bu teknenin paneline bağlan"
+                        >
+                          <Eye className="w-3 h-3" /> Panele Git
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {boats.length === 0 && (
-                    <tr><td colSpan={3} className="px-4 py-4 text-center">Henüz cihaz yok</td></tr>
+                    <tr><td colSpan={4} className="px-4 py-4 text-center">Henüz cihaz yok</td></tr>
                   )}
                 </tbody>
               </table>
