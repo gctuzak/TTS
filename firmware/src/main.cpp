@@ -381,6 +381,10 @@ void setup() {
 
   setupDisplay();
 
+  // BLE'yi Erken Başlat (WiFi Çakışmasını Önlemek İçin)
+  // WiFi başlatılmadan önce BLE kaynaklarını rezerve ediyoruz
+  victronScanner.init();
+  
   // NVS'den Ayarları Oku (ConfigManager)
   loadConfig();
   
@@ -404,39 +408,50 @@ void setup() {
         tft.setCursor(10, 40);
         tft.printf("SSID: %s", config_ssid.c_str());
         
+        WiFi.disconnect(true, true);  // Daha agresif temizlik
+        delay(500);
         WiFi.mode(WIFI_STA);
-        WiFi.disconnect();  // Temiz bir başlangıç
         delay(100);
         WiFi.persistent(false);
         WiFi.setAutoReconnect(true);
-        // WiFi.setSleep(false); SATIRI KALDIRILDI - BLE VE WIFI BIRLIKTE CALISIRKEN MODEM SLEEP ACIK OLMALI
+        // WiFi.setSleep(false); // Bu satır kaldırıldı veya true yapıldı
+        WiFi.setSleep(true); // Modem sleep mode enabled to coexist with BLE
         
+        // WiFi Güç Ayarı
+        WiFi.setTxPower(WIFI_POWER_17dBm); // Maksimum yerine biraz düşük (stabilite için)
         WiFi.setHostname("VictronMonitor");
         
-        // Şifre ve SSID'nin başında/sonunda boşluk varsa temizle
-        config_ssid.trim();
-        config_pass.trim();
+        Serial.printf("SSID: %s, PASS: %s\n", config_ssid.c_str(), config_pass.c_str());
         
-        Serial.printf("SSID: '%s', PASS: '%s'\n", config_ssid.c_str(), config_pass.c_str());
-        
-        Serial.println("Normal baglanti deneniyor...");
-        WiFi.begin(config_ssid.c_str(), config_pass.c_str());
+        int targetChannel = 0;
+        Serial.println("Ag Taramasi Baslatiliyor...");
+        int n = WiFi.scanNetworks();
+        if (n > 0) {
+            for (int i = 0; i < n; ++i) {
+                if (WiFi.SSID(i) == config_ssid) {
+                    targetChannel = WiFi.channel(i);
+                    Serial.printf("HEDEF AG BULUNDU! Kanal: %d, RSSI: %d\n", targetChannel, WiFi.RSSI(i));
+                    break;
+                }
+            }
+        }
+
+        if (targetChannel > 0) {
+            Serial.printf("Hedef Kanal (%d) ile baglaniliyor...\n", targetChannel);
+            WiFi.begin(config_ssid.c_str(), config_pass.c_str(), targetChannel);
+        } else {
+            Serial.println("Hedef ag taramada bulunamadi, normal baglanti deneniyor...");
+            WiFi.begin(config_ssid.c_str(), config_pass.c_str());
+        }
         
         int attempts = 0;
-        while (WiFi.status() != WL_CONNECTED && attempts < 40) { // 20 saniye bekliyoruz
+        while (WiFi.status() != WL_CONNECTED && attempts < 20) { // 10 saniye (Süre kısaltıldı)
             delay(500);
-            yield(); // Watchdog tetiklenmesini önlemek için
             Serial.print(".");
-            tft.setCursor(10 + ((attempts % 20) * 5), 70 + ((attempts / 20) * 15));
-            tft.setTextColor(TFT_WHITE);
+            tft.setCursor(10 + (attempts * 5), 60);
             tft.print(".");
             
             attempts++;
-            
-            // Her 5 saniyede bir durumu yazdır
-            if (attempts % 10 == 0) {
-                Serial.printf("\nDurum: %d (Reason: %s)\n", WiFi.status(), lastWifiError.c_str());
-            }
         }
         Serial.println();
         
@@ -445,24 +460,11 @@ void setup() {
             Serial.println(WiFi.localIP());
             isApMode = false;
         } else {
-            Serial.printf("WiFi Baglanti Hatasi! Durum: %d, Hata: %s\n", WiFi.status(), lastWifiError.c_str());
+            Serial.printf("WiFi Baglanti Hatasi! Durum: %d\n", WiFi.status());
             isApMode = true;
             
-            // Ekranda hata detayını göster
-            tft.fillScreen(TFT_BLACK);
-            tft.setTextColor(TFT_RED);
-            tft.setCursor(10, 10);
-            tft.println("BAGLANTI HATASI");
-            tft.setTextSize(1);
-            tft.setCursor(10, 40);
-            tft.printf("Durum: %d", WiFi.status());
-            tft.setCursor(10, 55);
-            tft.printf("Hata: %s", lastWifiError.c_str());
-            tft.setCursor(10, 70);
-            tft.println("Setup moduna geciliyor...");
-            delay(3000);
-            
             // BAĞLANTI HATASI DURUMUNDA AP MODUNA GEÇİŞİ ZORLA
+            Serial.println("Baglanti kurulamadi, AP moduna geciliyor...");
             WiFi.disconnect(true, true);
             delay(500);
         }
@@ -479,9 +481,6 @@ void setup() {
   // Web Sunucusunu Başlat (ConfigManager)
   setupWebServer();
   server.begin();
-
-  // WiFi Bağlantısı sonrası BLE başlatılıyor (Çakışmayı ve Durum 6 Hatasını önlemek için)
-  victronScanner.init();
 
   // BLE Başlat (AP Modunda da çalışsın)
     // Kayıtlı cihazları JSON'dan yükle

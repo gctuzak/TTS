@@ -91,7 +91,6 @@ void setupWebServer() {
         Serial.println("Devices: " + devicesJson);
 
         boatId.trim(); devicesJson.trim();
-        ssid.trim(); pass.trim(); // Eklendi: Wifi isminin veya şifresinin başında/sonunda yanlışlıkla boşluk bırakılmışsa sil
 
         if (ssid.length() > 0 && boatId.length() > 0) {
             saveConfig(ssid, pass, boatId, devicesJson);
