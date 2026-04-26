@@ -416,41 +416,17 @@ void setup() {
         WiFi.setAutoReconnect(true);
         WiFi.setSleep(false); // BLE ve WiFi çakışmalarında bazen false yapmak bağlantı stabilitesini artırır
         
-        // WiFi Dayanıklılık Ayarları
-        WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
-        WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
-        
         WiFi.setHostname("VictronMonitor");
         
         Serial.printf("SSID: %s, PASS: %s\n", config_ssid.c_str(), config_pass.c_str());
         
-        // Önce bir tarama yapalım (Ağ orada mı?)
-        Serial.println("Ag taraniyor...");
-        int n = WiFi.scanNetworks();
-        bool found = false;
-        for (int i = 0; i < n; ++i) {
-            if (WiFi.SSID(i) == config_ssid) {
-                found = true;
-                Serial.printf("Ag bulundu! Sinyal: %d dBm, Kanal: %d\n", WiFi.RSSI(i), WiFi.channel(i));
-                tft.setCursor(10, 55);
-                tft.setTextColor(TFT_GREEN);
-                tft.printf("Sinyal: %d dBm", WiFi.RSSI(i));
-                break;
-            }
-        }
-        if (!found) {
-            Serial.println("HATA: Hedef SSID bulunamadi!");
-            tft.setCursor(10, 55);
-            tft.setTextColor(TFT_RED);
-            tft.println("Ag Bulunamadi!");
-        }
-
         Serial.println("Normal baglanti deneniyor...");
         WiFi.begin(config_ssid.c_str(), config_pass.c_str());
         
         int attempts = 0;
-        while (WiFi.status() != WL_CONNECTED && attempts < 60) { // 30 saniye (Süre daha da uzatıldı)
+        while (WiFi.status() != WL_CONNECTED && attempts < 30) { // 15 saniye (süre biraz kısaltıldı)
             delay(500);
+            yield(); // Watchdog tetiklenmesini önlemek için
             Serial.print(".");
             tft.setCursor(10 + ((attempts % 20) * 5), 70 + ((attempts / 20) * 15));
             tft.setTextColor(TFT_WHITE);
