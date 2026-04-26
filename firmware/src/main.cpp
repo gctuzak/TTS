@@ -414,7 +414,7 @@ void setup() {
         delay(500);
         WiFi.persistent(false);
         WiFi.setAutoReconnect(true);
-        WiFi.setSleep(false); // BLE ve WiFi çakışmalarında bazen false yapmak bağlantı stabilitesini artırır
+        // WiFi.setSleep(false); SATIRI KALDIRILDI - BLE VE WIFI BIRLIKTE CALISIRKEN MODEM SLEEP ACIK OLMALI
         
         WiFi.setHostname("VictronMonitor");
         
