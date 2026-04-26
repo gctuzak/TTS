@@ -381,10 +381,6 @@ void setup() {
 
   setupDisplay();
 
-  // BLE'yi Erken Başlat (WiFi Çakışmasını Önlemek İçin)
-  // WiFi başlatılmadan önce BLE kaynaklarını rezerve ediyoruz
-  victronScanner.init();
-  
   // NVS'den Ayarları Oku (ConfigManager)
   loadConfig();
   
@@ -408,23 +404,26 @@ void setup() {
         tft.setCursor(10, 40);
         tft.printf("SSID: %s", config_ssid.c_str());
         
-        WiFi.disconnect(true, true);  // Daha agresif temizlik
-        delay(1000);
         WiFi.mode(WIFI_STA);
-        delay(500);
+        WiFi.disconnect();  // Temiz bir başlangıç
+        delay(100);
         WiFi.persistent(false);
         WiFi.setAutoReconnect(true);
         // WiFi.setSleep(false); SATIRI KALDIRILDI - BLE VE WIFI BIRLIKTE CALISIRKEN MODEM SLEEP ACIK OLMALI
         
         WiFi.setHostname("VictronMonitor");
         
-        Serial.printf("SSID: %s, PASS: %s\n", config_ssid.c_str(), config_pass.c_str());
+        // Şifre ve SSID'nin başında/sonunda boşluk varsa temizle
+        config_ssid.trim();
+        config_pass.trim();
+        
+        Serial.printf("SSID: '%s', PASS: '%s'\n", config_ssid.c_str(), config_pass.c_str());
         
         Serial.println("Normal baglanti deneniyor...");
         WiFi.begin(config_ssid.c_str(), config_pass.c_str());
         
         int attempts = 0;
-        while (WiFi.status() != WL_CONNECTED && attempts < 30) { // 15 saniye (süre biraz kısaltıldı)
+        while (WiFi.status() != WL_CONNECTED && attempts < 40) { // 20 saniye bekliyoruz
             delay(500);
             yield(); // Watchdog tetiklenmesini önlemek için
             Serial.print(".");
@@ -480,6 +479,9 @@ void setup() {
   // Web Sunucusunu Başlat (ConfigManager)
   setupWebServer();
   server.begin();
+
+  // WiFi Bağlantısı sonrası BLE başlatılıyor (Çakışmayı ve Durum 6 Hatasını önlemek için)
+  victronScanner.init();
 
   // BLE Başlat (AP Modunda da çalışsın)
     // Kayıtlı cihazları JSON'dan yükle
