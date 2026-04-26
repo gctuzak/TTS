@@ -409,49 +409,59 @@ void setup() {
         tft.printf("SSID: %s", config_ssid.c_str());
         
         WiFi.disconnect(true, true);  // Daha agresif temizlik
-        delay(500);
+        delay(1000);
         WiFi.mode(WIFI_STA);
-        delay(100);
+        delay(500);
         WiFi.persistent(false);
         WiFi.setAutoReconnect(true);
-        // WiFi.setSleep(false); // Bu satır kaldırıldı veya true yapıldı
-        WiFi.setSleep(true); // Modem sleep mode enabled to coexist with BLE
+        WiFi.setSleep(false); // BLE ve WiFi çakışmalarında bazen false yapmak bağlantı stabilitesini artırır
         
-        // WiFi Güç Ayarı
-        WiFi.setTxPower(WIFI_POWER_17dBm); // Maksimum yerine biraz düşük (stabilite için)
+        // WiFi Dayanıklılık Ayarları
+        WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+        WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+        
         WiFi.setHostname("VictronMonitor");
         
         Serial.printf("SSID: %s, PASS: %s\n", config_ssid.c_str(), config_pass.c_str());
         
-        int targetChannel = 0;
-        Serial.println("Ag Taramasi Baslatiliyor...");
+        // Önce bir tarama yapalım (Ağ orada mı?)
+        Serial.println("Ag taraniyor...");
         int n = WiFi.scanNetworks();
-        if (n > 0) {
-            for (int i = 0; i < n; ++i) {
-                if (WiFi.SSID(i) == config_ssid) {
-                    targetChannel = WiFi.channel(i);
-                    Serial.printf("HEDEF AG BULUNDU! Kanal: %d, RSSI: %d\n", targetChannel, WiFi.RSSI(i));
-                    break;
-                }
+        bool found = false;
+        for (int i = 0; i < n; ++i) {
+            if (WiFi.SSID(i) == config_ssid) {
+                found = true;
+                Serial.printf("Ag bulundu! Sinyal: %d dBm, Kanal: %d\n", WiFi.RSSI(i), WiFi.channel(i));
+                tft.setCursor(10, 55);
+                tft.setTextColor(TFT_GREEN);
+                tft.printf("Sinyal: %d dBm", WiFi.RSSI(i));
+                break;
             }
         }
-
-        if (targetChannel > 0) {
-            Serial.printf("Hedef Kanal (%d) ile baglaniliyor...\n", targetChannel);
-            WiFi.begin(config_ssid.c_str(), config_pass.c_str(), targetChannel);
-        } else {
-            Serial.println("Hedef ag taramada bulunamadi, normal baglanti deneniyor...");
-            WiFi.begin(config_ssid.c_str(), config_pass.c_str());
+        if (!found) {
+            Serial.println("HATA: Hedef SSID bulunamadi!");
+            tft.setCursor(10, 55);
+            tft.setTextColor(TFT_RED);
+            tft.println("Ag Bulunamadi!");
         }
+
+        Serial.println("Normal baglanti deneniyor...");
+        WiFi.begin(config_ssid.c_str(), config_pass.c_str());
         
         int attempts = 0;
-        while (WiFi.status() != WL_CONNECTED && attempts < 20) { // 10 saniye (Süre kısaltıldı)
+        while (WiFi.status() != WL_CONNECTED && attempts < 60) { // 30 saniye (Süre daha da uzatıldı)
             delay(500);
             Serial.print(".");
-            tft.setCursor(10 + (attempts * 5), 60);
+            tft.setCursor(10 + ((attempts % 20) * 5), 70 + ((attempts / 20) * 15));
+            tft.setTextColor(TFT_WHITE);
             tft.print(".");
             
             attempts++;
+            
+            // Her 5 saniyede bir durumu yazdır
+            if (attempts % 10 == 0) {
+                Serial.printf("\nDurum: %d (Reason: %s)\n", WiFi.status(), lastWifiError.c_str());
+            }
         }
         Serial.println();
         
@@ -460,11 +470,24 @@ void setup() {
             Serial.println(WiFi.localIP());
             isApMode = false;
         } else {
-            Serial.printf("WiFi Baglanti Hatasi! Durum: %d\n", WiFi.status());
+            Serial.printf("WiFi Baglanti Hatasi! Durum: %d, Hata: %s\n", WiFi.status(), lastWifiError.c_str());
             isApMode = true;
             
+            // Ekranda hata detayını göster
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextColor(TFT_RED);
+            tft.setCursor(10, 10);
+            tft.println("BAGLANTI HATASI");
+            tft.setTextSize(1);
+            tft.setCursor(10, 40);
+            tft.printf("Durum: %d", WiFi.status());
+            tft.setCursor(10, 55);
+            tft.printf("Hata: %s", lastWifiError.c_str());
+            tft.setCursor(10, 70);
+            tft.println("Setup moduna geciliyor...");
+            delay(3000);
+            
             // BAĞLANTI HATASI DURUMUNDA AP MODUNA GEÇİŞİ ZORLA
-            Serial.println("Baglanti kurulamadi, AP moduna geciliyor...");
             WiFi.disconnect(true, true);
             delay(500);
         }
